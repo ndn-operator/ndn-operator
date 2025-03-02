@@ -23,6 +23,7 @@ async fn main() -> anyhow::Result<()> {
         App::new()
             .app_data(Data::new(state.clone()))
             .wrap(middleware::Logger::default().exclude("/health"))
+            .service(index)
             .service(health)
     })
     .bind("0.0.0.0:8080")?

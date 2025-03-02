@@ -1,0 +1,6 @@
+apiVersion: named-data.net/v1alpha1
+kind: Network
+metadata:
+  name: test
+spec:
+  prefix: /test
