@@ -1,17 +1,16 @@
 use crate::{Error, Result};
+use crate::daemonset::*;
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
+use k8s_openapi::api::apps::v1::DaemonSet;
 use std::sync::Arc;
 use kube::{
-    api::{Api, ListParams, Patch, PatchParams, ResourceExt},
-    client::Client,
-    runtime::{
+    api::{Api, ListParams, Patch, PatchParams, ResourceExt}, client::Client, runtime::{
         controller::{Action, Controller},
         events::{Event, EventType, Recorder, Reporter},
         finalizer::{finalizer, Event as Finalizer},
         watcher::Config,
-    },
-    CustomResource, Resource,
+    }, CustomResource, Resource
 };
 use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
@@ -20,6 +19,7 @@ use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
 pub static NETWORK_FINALIZER: &str = "networks.named-data.net/finalizer";
+pub static MANAGER_NAME: &str = "ndnd-controller";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[kube(group = "named-data.net", version = "v1alpha1", kind = "Network", namespaced)]
@@ -30,7 +30,7 @@ pub struct NetworkSpec {
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 pub struct NetworkStatus {
-    nodes: Vec<String>,
+    ds_created: Option<bool>,
 }
 
 // Context for our reconciler
@@ -61,20 +61,33 @@ async fn reconcile(network: Arc<Network>, ctx: Arc<Context>) -> Result<Action> {
 
 impl Network {
     async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
-        let client = ctx.client.clone();
-        let ns = self.namespace().unwrap();
-        let name = self.name_any();
-        let networks: Api<Network> = Api::namespaced(client, &ns);
-        let new_status = Patch::Apply(json!({
-            "apiVersion": "named-data.net/v1alpha1",
-            "kind": "Network",
+        let api_nw: Api<Network> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
+        let api_ds: Api<DaemonSet> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
+        let serverside = PatchParams::apply(MANAGER_NAME);
+        let ds_data = create_owned_daemonset(&self);
+        let ds = api_ds.patch(&self.name_any(), &serverside, &Patch::Apply(ds_data)).await.map_err(Error::KubeError)?;
+        // Publish event
+        ctx.recorder
+            .publish(
+                &Event {
+                    type_: EventType::Normal,
+                    reason: "DaemonSetCreated".into(),
+                    note: Some(format!("Created `{}` DaemonSet for `{}` Network", ds.name_any(), self.name_any())),
+                    action: "Created".into(),
+                    secondary: None,
+                },
+                &self.object_ref(&()),
+            )
+            .await
+            .map_err(Error::KubeError)?;
+        // Update the status of the Network
+        let status = json!({
             "status": NetworkStatus {
-                nodes: vec!["node1".to_string(), "node2".to_string()],
+                ds_created: Some(true),
             }
-        }));
-        let ps = PatchParams::apply("cntrlr").force();
-        let _o = networks
-            .patch_status(&name, &ps, &new_status)
+        });
+        let _o = api_nw
+            .patch_status(&self.name_any(), &serverside, &Patch::Merge(&status))
             .await
             .map_err(Error::KubeError)?;
         Ok(Action::requeue(Duration::from_secs(5 * 60)))
