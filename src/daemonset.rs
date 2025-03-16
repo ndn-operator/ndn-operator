@@ -29,8 +29,8 @@ pub fn create_owned_daemonset(source: &Network) -> DaemonSet {
                 spec: Some(PodSpec {
                     init_containers: Some(vec![Container {
                         name: "gencfg".to_string(),
-                        image: Some("busybox".to_string()),
-                        command: vec!["sh".to_string(), "-c".to_string(), "echo init".to_string()].into(),
+                        image: Some("ghcr.io/gitopolis/ndn-operator:dev".to_string()),
+                        command: vec!["/genconfig".to_string(), "--output".to_string(), "/etc/example.yml".to_string()].into(),
                         security_context: Some(SecurityContext {
                             privileged: Some(true),
                             ..SecurityContext::default()
@@ -39,6 +39,7 @@ pub fn create_owned_daemonset(source: &Network) -> DaemonSet {
                             VolumeMount {
                                 name: "config".to_string(),
                                 mount_path: "/etc/example.yml".to_string(),
+                                read_only: Some(false),
                                 ..VolumeMount::default()
                             },
                         ]),
