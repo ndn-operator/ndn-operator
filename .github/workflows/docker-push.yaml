@@ -15,7 +15,7 @@ on:
     - README.md
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: gitopolis/ndn-operator
 jobs:
   build:
     runs-on: ubuntu-latest
