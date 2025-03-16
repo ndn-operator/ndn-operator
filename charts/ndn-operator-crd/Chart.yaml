@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ndn-operator-crd
+description: A Helm chart for NDN Operator Custom Resource Definitions
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
