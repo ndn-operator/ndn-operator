@@ -1,0 +1,25 @@
+apiVersion: v1
+entries:
+  ndn-operator:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2025-03-16T22:59:52.15518091Z"
+    description: A Helm chart for NDN Operator
+    digest: f2bc7ecb98510a30340cb3fb79219247dab9b8f581b17e8bb7f4023f34eef2d4
+    name: ndn-operator
+    type: application
+    urls:
+    - https://github.com/Gitopolis/ndn-operator/releases/download/ndn-operator-0.1.0/ndn-operator-0.1.0.tgz
+    version: 0.1.0
+  ndn-operator-crd:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2025-03-16T22:59:52.293518118Z"
+    description: A Helm chart for NDN Operator Custom Resource Definitions
+    digest: a6d190e3b50d017281d2685768c46fd054d46417ca64684c80092b4c8f07b8f1
+    name: ndn-operator-crd
+    type: application
+    urls:
+    - https://github.com/Gitopolis/ndn-operator/releases/download/ndn-operator-crd-0.1.0/ndn-operator-crd-0.1.0.tgz
+    version: 0.1.0
+generated: "2025-03-16T22:59:52.293523939Z"
