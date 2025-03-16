@@ -16,10 +16,16 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: gitopolis/ndn-operator
-  PLATFORMS: linux/amd64
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+        - runner: ubuntu-24.04
+          platforms: linux/amd64
+        - runner: ubuntu-24.04-arm
+          platforms: linux/arm64
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -58,7 +64,7 @@ jobs:
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        platforms: ${{ env.PLATFORMS }}
+        platforms: ${{ matrix.platforms }}
         cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache
         cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache,mode=max
     - name: Generate artifact attestation
