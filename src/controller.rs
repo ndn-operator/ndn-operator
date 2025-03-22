@@ -22,7 +22,7 @@ pub static NETWORK_FINALIZER: &str = "networks.named-data.net/finalizer";
 pub static MANAGER_NAME: &str = "ndnd-controller";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
-#[kube(group = "named-data.net", version = "v1alpha1", kind = "Network", namespaced)]
+#[kube(group = "named-data.net", version = "v1alpha1", kind = "Network", namespaced, shortname = "ndn")]
 #[kube(status = "NetworkStatus")]
 pub struct NetworkSpec {
     prefix: String,

@@ -74,7 +74,7 @@ pub fn create_owned_daemonset(source: &Network) -> DaemonSet {
                             name: "config".to_string(),
                             host_path: Some(HostPathVolumeSource {
                                 path: "/etc/ndnd/example.yml".to_string(),
-                                type_: Some("File".to_string()),
+                                type_: Some("FileOrCreate".to_string()),
                                 ..HostPathVolumeSource::default()
                             }),
                             ..Volume::default()

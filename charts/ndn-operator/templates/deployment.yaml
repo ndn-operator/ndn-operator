@@ -2,6 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ndn-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: ndn-operator
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   replicas: 1
   selector:
@@ -11,6 +15,7 @@ spec:
     metadata:
       labels:
         app: ndn-operator
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
       serviceAccountName: ndn-operator
       containers:

@@ -1,7 +1,6 @@
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
-  namespace: ndn-operator
   name: ndn-operator
 rules:
 - apiGroups: [""]
@@ -13,3 +12,9 @@ rules:
 - apiGroups: ["named-data.net"]
   resources: ["networks/status"]
   verbs: ["update", "patch"]
+- apiGroups: ["events.k8s.io"]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+- apiGroups: ["apps"]
+  resources: ["daemonsets"]
+  verbs: ["create", "patch", "delete"]
