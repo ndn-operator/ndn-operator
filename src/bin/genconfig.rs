@@ -4,7 +4,6 @@ use controller::ndnd::dv::RouterConfig;
 use controller::ndnd::fw::{ForwarderConfig, FacesConfig, UdpConfig, UnixConfig};
 use clap::Parser;
 use std::env;
-use std::fmt::format;
 
 /// Generate config file for ndnd
 #[derive(Parser, Debug)]
