@@ -17,9 +17,9 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub mod controller;
 pub mod daemonset;
-pub mod ndnd_config;
+pub mod ndnd;
 pub use crate::controller::*;
-pub use crate::ndnd_config::NdndConfig;
+pub use crate::ndnd::*;
 
 /// Log and trace integrations
 pub mod telemetry;

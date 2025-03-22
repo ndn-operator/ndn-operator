@@ -12,12 +12,12 @@ pub struct ForwarderConfig {
 }
 
 impl ForwarderConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
-            core: Some(CoreConfig::new()),
-            faces: FacesConfig::new(),
-            fw: FwConfig::new(),
-            mgmt: Some(MgmtConfig::new()),
+            core: Some(CoreConfig::default()),
+            faces: FacesConfig::default(),
+            fw: FwConfig::default(),
+            mgmt: Some(MgmtConfig::default()),
             tables: None,
         }
     }
@@ -31,7 +31,7 @@ pub struct CoreConfig {
 }
 
 impl CoreConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             log_level: "INFO".to_string(),
             log_file: None,
@@ -52,14 +52,14 @@ pub struct FacesConfig {
 }
 
 impl FacesConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             queue_size: Some(1024),
             congestion_marking: Some(true),
             lock_threads_to_cores: Some(false),
-            udp: Some(UdpConfig::new()),
+            udp: Some(UdpConfig::default()),
             tcp: None,
-            unix: Some(UnixConfig::new()),
+            unix: Some(UnixConfig::default()),
             websocket: None,
         }
     }
@@ -79,7 +79,7 @@ pub struct UdpConfig {
 }
 
 impl UdpConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             enabled_unicast: true,
             enabled_multicast: false,
@@ -103,7 +103,7 @@ pub struct TcpConfig {
 }
 
 impl TcpConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             enabled: true,
             port_unicast: 6363,
@@ -121,7 +121,7 @@ pub struct UnixConfig {
 }
 
 impl UnixConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             enabled: true,
             socket_path: "/run/nfd/nfd.sock".to_string(),
@@ -141,7 +141,7 @@ pub struct WebSocketConfig {
 }
 
 impl WebSocketConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             enabled: true,
             bind: "".to_string(),
@@ -162,7 +162,7 @@ pub struct FwConfig {
 }
 
 impl FwConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             threads: Some(8),
             queue_size: Some(1024),
@@ -178,7 +178,7 @@ pub struct MgmtConfig {
 }
 
 impl MgmtConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             allow_localhop: false,
         }
@@ -196,13 +196,13 @@ pub struct TablesConfig {
 }
 
 impl TablesConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
-            content_store: ContentStoreConfig::new(),
-            dead_nonce_list: Some(DeadNonceListConfig::new()),
-            network_region: Some(NetworkRegionConfig::new()),
-            rib: RibConfig::new(),
-            fib: FibConfig::new(),
+            content_store: ContentStoreConfig::default(),
+            dead_nonce_list: Some(DeadNonceListConfig::default()),
+            network_region: Some(NetworkRegionConfig::default()),
+            rib: RibConfig::default(),
+            fib: FibConfig::default(),
         }
     }
 }
@@ -216,7 +216,7 @@ pub struct ContentStoreConfig {
 }
 
 impl ContentStoreConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             capacity: 1024,
             admit: true,
@@ -232,7 +232,7 @@ pub struct DeadNonceListConfig {
 }
 
 impl DeadNonceListConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             lifetime: 6000,
         }
@@ -245,7 +245,7 @@ pub struct NetworkRegionConfig {
 }
 
 impl NetworkRegionConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             regions: Vec::new(),
         }
@@ -258,7 +258,7 @@ pub struct RibConfig {
 }
 
 impl RibConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             readvertise_nlsr: true,
         }
@@ -272,10 +272,10 @@ pub struct FibConfig {
 }
 
 impl FibConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             algorithm: "nametree".to_string(),
-            hashtable: HashtableConfig::new(),
+            hashtable: HashtableConfig::default(),
         }
     }
 }
@@ -286,7 +286,7 @@ pub struct HashtableConfig {
 }
 
 impl HashtableConfig {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self {
             m: 5,
         }

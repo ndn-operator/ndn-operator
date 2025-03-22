@@ -1,5 +1,5 @@
 use k8s_openapi::api::apps::v1::{DaemonSet, DaemonSetSpec};
-use k8s_openapi::api::core::v1::{Container, HostPathVolumeSource, PodSpec, PodTemplateSpec, SecurityContext, Volume, VolumeMount};
+use k8s_openapi::api::core::v1::{Container, EnvVar, EnvVarSource, HostPathVolumeSource, ObjectFieldSelector, PodSpec, PodTemplateSpec, SecurityContext, Volume, VolumeMount};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
 use kube::{Resource, ResourceExt};
 use std::collections::BTreeMap;
@@ -31,6 +31,29 @@ pub fn create_owned_daemonset(source: &Network) -> DaemonSet {
                         name: "gencfg".to_string(),
                         image: Some("ghcr.io/gitopolis/ndn-operator:dev".to_string()),
                         command: vec!["/genconfig".to_string(), "--output".to_string(), "/etc/ndnd/example.yml".to_string()].into(),
+                        env: Some(vec![
+                            EnvVar {
+                                name: "NDN_NETWORK_NAME".to_string(),
+                                value: Some(source.name_any()),
+                                ..EnvVar::default()
+                            },
+                            EnvVar {
+                                name: "NDN_ROUTER_NAME".to_string(),
+                                value_from: Some(EnvVarSource {
+                                    field_ref: Some(ObjectFieldSelector {
+                                        field_path: "spec.nodeName".to_string(),
+                                        ..ObjectFieldSelector::default()
+                                    }),
+                                    ..EnvVarSource::default()
+                                }),
+                                ..EnvVar::default()
+                            },
+                            EnvVar {
+                                name: "NDN_SOCKET_DIR".to_string(),
+                                value: Some("/run/ndnd".to_string()),
+                                ..EnvVar::default()
+                            },
+                        ]),
                         security_context: Some(SecurityContext {
                             privileged: Some(true),
                             ..SecurityContext::default()

@@ -14,10 +14,10 @@ pub struct RouterConfig {
 }
 
 impl RouterConfig {
-    pub fn new(network: String, router: String) -> Self {
+    pub fn default() -> Self {
         Self {
-            network: network,
-            router: router,
+            network: "ndn".to_string(),
+            router: "ndnd".to_string(),
             advertise_interval: None,
             router_dead_interval: None,
             keychain: "insecure".to_string(),
