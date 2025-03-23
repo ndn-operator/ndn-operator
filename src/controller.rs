@@ -3,6 +3,7 @@ use crate::daemonset::*;
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use k8s_openapi::api::apps::v1::DaemonSet;
+use k8s_openapi::api::core::v1::Pod;
 use std::sync::Arc;
 use kube::{
     api::{Api, ListParams, Patch, PatchParams, ResourceExt}, client::Client, runtime::{
@@ -22,7 +23,7 @@ pub static NETWORK_FINALIZER: &str = "networks.named-data.net/finalizer";
 pub static MANAGER_NAME: &str = "ndnd-controller";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
-#[kube(group = "named-data.net", version = "v1alpha1", kind = "Network", namespaced)]
+#[kube(group = "named-data.net", version = "v1alpha1", kind = "Network", namespaced, shortname = "ndn")]
 #[kube(status = "NetworkStatus")]
 pub struct NetworkSpec {
     prefix: String,
@@ -64,7 +65,8 @@ impl Network {
         let api_nw: Api<Network> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let api_ds: Api<DaemonSet> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let serverside = PatchParams::apply(MANAGER_NAME);
-        let ds_data = create_owned_daemonset(&self);
+        let image = get_my_image(ctx.client.clone()).await;
+        let ds_data = create_owned_daemonset(&self, &image);
         let ds = api_ds.patch(&self.name_any(), &serverside, &Patch::Apply(ds_data)).await.map_err(Error::KubeError)?;
         // Publish event
         ctx.recorder
@@ -160,6 +162,22 @@ impl State {
 fn error_policy(_: Arc<Network>, error: &Error, _: Arc<Context>) -> Action {
     warn!("reconcile failed: {:?}", error);
     Action::requeue(Duration::from_secs(5 * 60))
+}
+
+fn get_my_namespace() -> String {
+    std::fs::read_to_string("/var/run/secrets/kubernetes.io/serviceaccount/namespace").unwrap()
+}
+
+fn get_my_pod_name() -> String {
+    std::fs::read_to_string("/etc/hostname").unwrap().trim_end_matches('\n').to_string()
+}
+
+async fn get_my_image(client: Client) -> String {
+    let pods = Api::<Pod>::namespaced(client.clone(), &get_my_namespace());
+    let pod = pods.get(&get_my_pod_name()).await.expect("Failed to get my pod");
+    let pod_spec = pod.spec.expect("Pod has no spec");
+    let container = pod_spec.containers.first().expect("Pod has no containers");
+    container.image.clone().expect("Container has no image")
 }
 
 pub async fn run(state: State) {
