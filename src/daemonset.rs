@@ -5,7 +5,7 @@ use kube::{Resource, ResourceExt};
 use std::collections::BTreeMap;
 use crate::Network;
 
-pub fn create_owned_daemonset(source: &Network) -> DaemonSet {
+pub fn create_owned_daemonset(source: &Network, image: &String) -> DaemonSet {
     let oref = source.controller_owner_ref(&()).unwrap();
     let mut labels = BTreeMap::new();
     labels.insert("network".to_string(), source.name_any());
@@ -29,7 +29,7 @@ pub fn create_owned_daemonset(source: &Network) -> DaemonSet {
                 spec: Some(PodSpec {
                     init_containers: Some(vec![Container {
                         name: "gencfg".to_string(),
-                        image: Some("ghcr.io/gitopolis/ndn-operator:dev".to_string()),
+                        image: Some(image.clone()),
                         command: vec!["/genconfig".to_string(), "--output".to_string(), "/etc/ndnd/example.yml".to_string()].into(),
                         env: Some(vec![
                             EnvVar {
