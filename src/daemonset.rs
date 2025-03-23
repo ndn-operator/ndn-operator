@@ -1,9 +1,9 @@
+use crate::crd::Network;
 use k8s_openapi::api::apps::v1::{DaemonSet, DaemonSetSpec};
 use k8s_openapi::api::core::v1::{Container, EnvVar, EnvVarSource, HostPathVolumeSource, ObjectFieldSelector, PodSpec, PodTemplateSpec, SecurityContext, Volume, VolumeMount};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
 use kube::{Resource, ResourceExt};
 use std::collections::BTreeMap;
-use crate::Network;
 
 pub fn create_owned_daemonset(source: &Network, image: &String) -> DaemonSet {
     let oref = source.controller_owner_ref(&()).unwrap();
