@@ -49,8 +49,8 @@ pub fn create_owned_daemonset(source: &Network, image: &String) -> DaemonSet {
                                 ..EnvVar::default()
                             },
                             EnvVar {
-                                name: "NDN_SOCKET_DIR".to_string(),
-                                value: Some("/run/ndnd".to_string()),
+                                name: "NDN_SOCKET_PATH".to_string(),
+                                value: Some(format!("/run/ndnd/{}.sock", source.name_any())),
                                 ..EnvVar::default()
                             },
                         ]),
@@ -77,6 +77,13 @@ pub fn create_owned_daemonset(source: &Network, image: &String) -> DaemonSet {
                             privileged: Some(true),
                             ..SecurityContext::default()
                         }),
+                        env: Some(vec![
+                            EnvVar {
+                                name: "NDN_CLIENT_TRANSPORT".to_string(),
+                                value: Some(format!("unix:///run/ndnd/{}.sock", source.name_any())),
+                                ..EnvVar::default()
+                            },
+                        ]),
                         volume_mounts: Some(vec![
                             VolumeMount {
                                 name: "config".to_string(),

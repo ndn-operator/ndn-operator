@@ -18,7 +18,7 @@ fn main() {
     let args = Args::parse();
     let network_name = env::var("NDN_NETWORK_NAME").unwrap_or("ndn".to_string());
     let router_name = env::var("NDN_ROUTER_NAME").unwrap_or("router".to_string());
-    let socket_dir = env::var("NDN_SOCKET_DIR").unwrap_or("/var/run/".to_string());
+    let socket_path = env::var("NDN_SOCKET_PATH").unwrap_or("/run/nfd/nfd.sock".to_string());
     let config = NdndConfig {
         dv: RouterConfig {
             network: format!("/{network_name}" ),
@@ -34,7 +34,7 @@ fn main() {
             }),
             unix: Some(UnixConfig {
               enabled: true,
-              socket_path: format!("{socket_dir}/{network_name}.sock"),
+              socket_path: socket_path,
             }),
             ..FacesConfig::default()
           },
