@@ -22,7 +22,7 @@ pub fn create_owned_router(source: &Network, node: &Node) -> Router {
     let oref = source.controller_owner_ref(&()).unwrap();
     Router {
         metadata: ObjectMeta {
-            generate_name: Some(format!("{}-", source.name_any())),
+            name: Some(format!("{}-{}", source.name_any(), node.name_any())),
             namespace: source.namespace(),
             owner_references: Some(vec![oref]),
             labels: Some(source.labels().clone()),
