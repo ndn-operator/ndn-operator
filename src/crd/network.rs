@@ -69,9 +69,10 @@ impl Network {
             let node_name = node.metadata.name.clone().unwrap();
             info!("Reconciling router for node {}", node_name);
             let router_data = create_owned_router(&self, &node);
+            let router_name = router_data.name_any();
             let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
             let router = api_router
-                .patch(&node_name, &serverside, &Patch::Apply(router_data))
+                .patch(&router_name, &serverside, &Patch::Apply(router_data))
                 .await
                 .map_err(Error::KubeError)?;
             ctx.recorder
