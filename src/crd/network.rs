@@ -1,17 +1,22 @@
 use std::sync::Arc;
 
 use crate::{daemonset::*, Context, Error, Result};
-use k8s_openapi::api::{apps::v1::DaemonSet, core::v1::Pod};
+use k8s_openapi::{api::{apps::v1::DaemonSet, core::v1::{Node, Pod}}, apimachinery::pkg::api};
 use kube::{
-    api::{Api, Patch, PatchParams, ResourceExt}, client::Client, runtime::{
+    api::{Api, Patch, PatchParams, ResourceExt},
+    client::Client,
+    runtime::{
         controller::Action,
         events::{Event, EventType},
+        watcher,
+        WatchStreamExt,
     }, CustomResource, Resource
 };
 use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
 use serde_json::json;
 use tokio::time::Duration;
+use futures::{Stream, StreamExt, TryStreamExt};
 
 pub static NETWORK_FINALIZER: &str = "networks.named-data.net/finalizer";
 pub static MANAGER_NAME: &str = "ndnd-controller";
@@ -21,6 +26,7 @@ pub static MANAGER_NAME: &str = "ndnd-controller";
 #[kube(status = "NetworkStatus")]
 pub struct NetworkSpec {
     prefix: String,
+    nodeSelector: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]

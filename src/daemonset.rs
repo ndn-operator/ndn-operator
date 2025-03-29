@@ -27,6 +27,7 @@ pub fn create_owned_daemonset(source: &Network, image: &String) -> DaemonSet {
                     ..ObjectMeta::default()
                 }),
                 spec: Some(PodSpec {
+                    service_account_name: Some("ndnd".to_string()),
                     init_containers: Some(vec![Container {
                         name: "gencfg".to_string(),
                         image: Some(image.clone()),

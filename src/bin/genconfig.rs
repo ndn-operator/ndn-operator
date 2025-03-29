@@ -9,9 +9,9 @@ use std::env;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-  // Output file
-  #[arg(short, long)]
-  output: String,
+    // Output file
+    #[arg(short, long)]
+    output: String,
 }
 
 fn main() {

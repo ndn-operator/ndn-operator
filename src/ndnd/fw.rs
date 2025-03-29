@@ -58,9 +58,9 @@ impl FacesConfig {
             congestion_marking: Some(true),
             lock_threads_to_cores: Some(false),
             udp: Some(UdpConfig::default()),
-            tcp: None,
+            tcp: Some(TcpConfig::default()),
             unix: Some(UnixConfig::default()),
-            websocket: None,
+            websocket: Some(WebSocketConfig::default()),
         }
     }
 }
@@ -81,7 +81,7 @@ pub struct UdpConfig {
 impl UdpConfig {
     pub fn default() -> Self {
         Self {
-            enabled_unicast: true,
+            enabled_unicast: false,
             enabled_multicast: false,
             port_unicast: Some(6363),
             port_multicast: None,
@@ -105,7 +105,7 @@ pub struct TcpConfig {
 impl TcpConfig {
     pub fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             port_unicast: 6363,
             lifetime: Some(600),
             reconnect_interval: Some(10),
@@ -123,7 +123,7 @@ pub struct UnixConfig {
 impl UnixConfig {
     pub fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             socket_path: "/run/nfd/nfd.sock".to_string(),
         }
     }
@@ -143,7 +143,7 @@ pub struct WebSocketConfig {
 impl WebSocketConfig {
     pub fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             bind: "".to_string(),
             port: 9696,
             tls_enabled: false,

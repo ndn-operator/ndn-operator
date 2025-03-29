@@ -1,6 +1,7 @@
 use crate::{crd::{NETWORK_FINALIZER, Network}, Error, Result};
 use chrono::{DateTime, Utc};
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
+use k8s_openapi::api::core::v1::Node;
 
 use std::sync::Arc;
 use kube::{
@@ -8,7 +9,8 @@ use kube::{
         controller::{Action, Controller},
         events::{Recorder, Reporter},
         finalizer::{finalizer, Event as Finalizer},
-        watcher::Config,
+        watcher,
+        WatchStreamExt,
     }
 };
 use serde::Serialize;
@@ -95,16 +97,24 @@ fn error_policy(_: Arc<Network>, error: &Error, _: Arc<Context>) -> Action {
 
 pub async fn run(state: State) {
     let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
-    let networks = Api::<Network>::all(client.clone());
-    if let Err(e) = networks.list(&ListParams::default().limit(1)).await {
+    let api_networks = Api::<Network>::all(client.clone());
+    if let Err(e) = api_networks.list(&ListParams::default().limit(1)).await {
         error!("CRD is not queryable; {e:?}. Is the CRD installed?");
         info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
         std::process::exit(1);
     }
-    Controller::new(networks, Config::default().any_semantic())
+    Controller::new(api_networks, watcher::Config::default().any_semantic())
         .shutdown_on_signal()
-        .run(reconcile, error_policy, state.to_context(client).await)
+        .run(reconcile, error_policy, state.to_context(client.clone()).await)
         .filter_map(async |x| { std::result::Result::ok(x) })
         .for_each(|_| futures::future::ready(()))
         .await;
+
+    let api_nodes: Api<Node> = Api::all(client);
+    let wc = watcher::Config::default().streaming_lists();
+    let _ = watcher(api_nodes, wc).applied_objects().try_for_each(async |node| {
+        let node_name = node.metadata.name.as_deref().unwrap_or_default();
+        info!("Node watcher: {node_name}");
+        Ok(())
+    }).await;
 }
