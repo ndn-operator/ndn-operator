@@ -1,5 +1,5 @@
 use std::sync::Arc;
-
+use super::router::{Router, create_owned_router};
 use crate::{daemonset::*, Context, Error, Result};
 use k8s_openapi::api::{apps::v1::DaemonSet, core::v1::{Node, Pod}};
 use kube::{
@@ -23,8 +23,8 @@ pub static MANAGER_NAME: &str = "ndnd-controller";
 #[kube(group = "named-data.net", version = "v1alpha1", kind = "Network", namespaced, shortname = "ndn")]
 #[kube(status = "NetworkStatus")]
 pub struct NetworkSpec {
-    prefix: String,
-    node_selector: Option<String>,
+    pub prefix: String,
+    pub node_selector: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
@@ -68,6 +68,25 @@ impl Network {
         for node in node_list.items {
             let node_name = node.metadata.name.clone().unwrap();
             info!("Reconciling router for node {}", node_name);
+            let router_data = create_owned_router(&self, &node);
+            let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
+            let router = api_router
+                .patch(&node_name, &serverside, &Patch::Apply(router_data))
+                .await
+                .map_err(Error::KubeError)?;
+            ctx.recorder
+                .publish(
+                    &Event {
+                        type_: EventType::Normal,
+                        reason: "RouterCreated".into(),
+                        note: Some(format!("Created `{}` Router for `{}` Network", router.name_any(), self.name_any())),
+                        action: "Created".into(),
+                        secondary: None,
+                    },
+                    &self.object_ref(&()),
+                )
+                .await
+                .map_err(Error::KubeError)?;
         }
         let _o = api_nw
             .patch_status(&self.name_any(), &serverside, &Patch::Merge(&status))
