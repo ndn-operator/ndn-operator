@@ -1,22 +1,20 @@
 use std::sync::Arc;
 
 use crate::{daemonset::*, Context, Error, Result};
-use k8s_openapi::{api::{apps::v1::DaemonSet, core::v1::{Node, Pod}}, apimachinery::pkg::api};
+use k8s_openapi::api::{apps::v1::DaemonSet, core::v1::{Node, Pod}};
 use kube::{
-    api::{Api, Patch, PatchParams, ResourceExt},
+    api::{Api, ListParams, Patch, PatchParams, ResourceExt},
     client::Client,
     runtime::{
         controller::Action,
         events::{Event, EventType},
-        watcher,
-        WatchStreamExt,
     }, CustomResource, Resource
 };
 use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
 use serde_json::json;
 use tokio::time::Duration;
-use futures::{Stream, StreamExt, TryStreamExt};
+use tracing::*;
 
 pub static NETWORK_FINALIZER: &str = "networks.named-data.net/finalizer";
 pub static MANAGER_NAME: &str = "ndnd-controller";
@@ -26,7 +24,7 @@ pub static MANAGER_NAME: &str = "ndnd-controller";
 #[kube(status = "NetworkStatus")]
 pub struct NetworkSpec {
     prefix: String,
-    nodeSelector: Option<String>,
+    node_selector: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
@@ -62,6 +60,15 @@ impl Network {
                 ds_created: Some(true),
             }
         });
+        // List all nodes
+        let nodes: Api<Node> = Api::all(ctx.client.clone());
+        let lp = ListParams::default();
+        let node_list = nodes.list(&lp).await.map_err(Error::KubeError)?;
+        // Reconcile a router object for each node
+        for node in node_list.items {
+            let node_name = node.metadata.name.clone().unwrap();
+            info!("Reconciling router for node {}", node_name);
+        }
         let _o = api_nw
             .patch_status(&self.name_any(), &serverside, &Patch::Merge(&status))
             .await
@@ -97,7 +104,7 @@ fn get_my_pod_name() -> String {
 }
 
 async fn get_my_image(client: Client) -> String {
-    let pods = Api::<Pod>::namespaced(client.clone(), &get_my_namespace());
+    let pods = Api::<Pod>::namespaced(client, &get_my_namespace());
     let pod = pods.get(&get_my_pod_name()).await.expect("Failed to get my pod");
     let pod_spec = pod.spec.expect("Pod has no spec");
     let container = pod_spec.containers.first().expect("Pod has no containers");
