@@ -5,7 +5,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
 use kube::{Resource, ResourceExt};
 use std::collections::BTreeMap;
 
-pub fn create_owned_daemonset(source: &Network, image: &String) -> DaemonSet {
+pub fn create_owned_daemonset(source: &Network, image: Option<String>, service_account: Option<String>) -> DaemonSet {
     let oref = source.controller_owner_ref(&()).unwrap();
     let mut labels = BTreeMap::new();
     labels.insert("network".to_string(), source.name_any());
@@ -27,10 +27,10 @@ pub fn create_owned_daemonset(source: &Network, image: &String) -> DaemonSet {
                     ..ObjectMeta::default()
                 }),
                 spec: Some(PodSpec {
-                    service_account_name: Some("ndnd".to_string()),
+                    service_account_name: service_account,
                     init_containers: Some(vec![Container {
                         name: "gencfg".to_string(),
-                        image: Some(image.clone()),
+                        image: image,
                         command: vec!["/genconfig".to_string(), "--output".to_string(), "/etc/ndnd/example.yml".to_string()].into(),
                         env: Some(vec![
                             EnvVar {

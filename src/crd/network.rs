@@ -37,8 +37,13 @@ impl Network {
         let api_nw: Api<Network> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let api_ds: Api<DaemonSet> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let serverside = PatchParams::apply(MANAGER_NAME);
-        let image = get_my_image(ctx.client.clone()).await;
-        let ds_data = create_owned_daemonset(&self, &image);
+        let my_pod_spec = get_my_pod(ctx.client.clone())
+            .await
+            .expect("Failed to get my pod")
+            .spec
+            .expect("Failed to get pod spec");
+        let my_image = my_pod_spec.containers.first().expect("Failed to get my container").image.clone();
+        let ds_data = create_owned_daemonset(&self, my_image, my_pod_spec.service_account_name);
         let ds = api_ds.patch(&self.name_any(), &serverside, &Patch::Apply(ds_data)).await.map_err(Error::KubeError)?;
         // Publish event
         ctx.recorder
@@ -123,10 +128,7 @@ fn get_my_pod_name() -> String {
     std::fs::read_to_string("/etc/hostname").unwrap().trim_end_matches('\n').to_string()
 }
 
-async fn get_my_image(client: Client) -> String {
+async fn get_my_pod(client: Client) -> Result<Pod> {
     let pods = Api::<Pod>::namespaced(client, &get_my_namespace());
-    let pod = pods.get(&get_my_pod_name()).await.expect("Failed to get my pod");
-    let pod_spec = pod.spec.expect("Pod has no spec");
-    let container = pod_spec.containers.first().expect("Pod has no containers");
-    container.image.clone().expect("Container has no image")
+    pods.get(&get_my_pod_name()).await.map_err(crate::Error::KubeError)
 }
