@@ -1,7 +1,7 @@
-extern crate controller;
-use controller::ndnd::NdndConfig;
-use controller::ndnd::dv::RouterConfig;
-use controller::ndnd::fw::{ForwarderConfig, FacesConfig, UdpConfig, UnixConfig};
+
+use controller::NdndConfig;
+use controller::dv::RouterConfig;
+use controller::fw::{ForwarderConfig, FacesConfig, UdpConfig, UnixConfig};
 use clap::Parser;
 use std::env;
 
@@ -9,9 +9,9 @@ use std::env;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-  // Output file
-  #[arg(short, long)]
-  output: String,
+    // Output file
+    #[arg(short, long)]
+    output: String,
 }
 
 fn main() {

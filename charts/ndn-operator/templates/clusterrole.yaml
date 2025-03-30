@@ -4,13 +4,16 @@ metadata:
   name: ndn-operator
 rules:
 - apiGroups: [""]
-  resources: ["pods"]
+  resources: ["pods", "nodes"]
   verbs: ["get", "watch", "list"]
 - apiGroups: ["named-data.net"]
   resources: ["networks"]
   verbs: ["get", "watch", "list", "update", "patch"]
 - apiGroups: ["named-data.net"]
-  resources: ["networks/status"]
+  resources: ["routers"]
+  verbs: ["create", "get", "watch", "list", "update", "patch"]
+- apiGroups: ["named-data.net"]
+  resources: ["networks/status", "routers/status"]
   verbs: ["update", "patch"]
 - apiGroups: ["events.k8s.io"]
   resources: ["events"]

@@ -15,9 +15,10 @@ pub enum Error {
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub mod controller;
+mod controller;
+mod ndnd;
 pub mod daemonset;
-pub mod ndnd;
+pub mod crd;
 pub use crate::controller::*;
 pub use crate::ndnd::*;
 
