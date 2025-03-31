@@ -60,22 +60,23 @@ fn gen_config(network_name: String, router_name: String, socket_path: Option<Str
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let network_name = env::var("NDN_NETWORK_NAME").unwrap_or("ndn".to_string());
-    let network_namespace = env::var("NDN_NETWORK_NAMESPACE").unwrap_or("default".to_string());
-    let router_name = env::var("NDN_ROUTER_NAME").unwrap_or("router".to_string());
+    let network_name = env::var("NDN_NETWORK_NAME")?;
+    let network_namespace = env::var("NDN_NETWORK_NAMESPACE")?;
+    let router_name = env::var("NDN_ROUTER_NAME")?;
     let socket_path = env::var("NDN_SOCKET_PATH").ok();
     
     // Generate Ndnd config
     let config = gen_config(network_name.clone(), router_name.clone(), socket_path);
-    let config_str = serde_yaml::to_string(&config).unwrap();
-    std::fs::write(args.output, config_str.clone()).unwrap();
+    let config_str = serde_yaml::to_string(&config)?;
+    std::fs::write(args.output, config_str.clone())?;
     println!("{}", config_str);
 
     // Create router in the same namespace as the parent network
-    let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
+    let client = Client::try_default().await?;
     let api_nw: Api<Network> = Api::namespaced(client.clone(), &network_namespace);
-    let nw = api_nw.get(&network_name).await.expect("Failed to get network");
-    let _ = create_router(&nw, router_name, &network_namespace, client).await.expect("Failed to create router");
+    let nw = api_nw.get(&network_name).await?;
+    let _ = create_router(&nw, router_name, &network_namespace, client).await?;
+    Ok(())
 }
