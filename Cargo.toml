@@ -12,17 +12,22 @@ name = "gencrd"
 path = "src/bin/gencrd.rs"
 
 [[bin]]
-name = "genconfig"
+name = "init"
 path = "src/bin/pod_init.rs"
+
+[[bin]]
+name = "sidecar"
+path = "src/bin/pod_sidecar.rs"
 
 [dependencies]
 actix-web = "4.9.0"
 anyhow = "1.0.96"
 chrono = { version = "0.4.40", features = ["serde"] }
-clap = { version = "4.5.34", features = ["derive"] }
+clap = { version = "4.5.35", features = ["derive"] }
 futures = "0.3.31"
 k8s-openapi = { version = "0.24.0", features = ["latest"] }
 kube = { version = "0.99.0", features = ["runtime", "client", "derive"] }
+local-ip-address = "0.6.3"
 schemars = "0.8.22"
 serde = "1.0.218"
 serde_json = "1.0.139"

@@ -1,6 +1,6 @@
-use crate::crd::Network;
+use crate::crd::{Network, UDP_UNICAST_PORT};
 use k8s_openapi::api::apps::v1::{DaemonSet, DaemonSetSpec};
-use k8s_openapi::api::core::v1::{Container, EnvVar, EnvVarSource, HostPathVolumeSource, ObjectFieldSelector, PodSpec, PodTemplateSpec, SecurityContext, Volume, VolumeMount};
+use k8s_openapi::api::core::v1::{Container, ContainerPort, EnvVar, EnvVarSource, HostPathVolumeSource, ObjectFieldSelector, PodSpec, PodTemplateSpec, SecurityContext, Volume, VolumeMount};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
 use kube::{Resource, ResourceExt};
 use std::collections::BTreeMap;
@@ -28,10 +28,12 @@ pub fn create_owned_daemonset(source: &Network, image: Option<String>, service_a
                 }),
                 spec: Some(PodSpec {
                     service_account_name: service_account,
+                    host_network: Some(true),
+                    dns_policy: Some("ClusterFirstWithHostNet".to_string()),
                     init_containers: Some(vec![Container {
                         name: "gencfg".to_string(),
-                        image: image,
-                        command: vec!["/pod_init".to_string(), "--output".to_string(), "/etc/ndnd/example.yml".to_string()].into(),
+                        image: image.clone(),
+                        command: vec!["/init".to_string(), "--output".to_string(), "/etc/ndnd/example.yml".to_string()].into(),
                         env: Some(vec![
                             EnvVar {
                                 name: "NDN_NETWORK_NAME".to_string(),
@@ -89,6 +91,14 @@ pub fn create_owned_daemonset(source: &Network, image: Option<String>, service_a
                             privileged: Some(true),
                             ..SecurityContext::default()
                         }),
+                        ports: Some(vec![
+                            ContainerPort {
+                                container_port: UDP_UNICAST_PORT,
+                                host_port: Some(UDP_UNICAST_PORT),
+                                protocol: Some("UDP".to_string()),
+                                ..ContainerPort::default()
+                            },
+                        ]),
                         env: Some(vec![
                             EnvVar {
                                 name: "NDN_CLIENT_TRANSPORT".to_string(),
@@ -107,6 +117,41 @@ pub fn create_owned_daemonset(source: &Network, image: Option<String>, service_a
                                 name: "run-ndnd".to_string(),
                                 mount_path: "/run/ndnd".to_string(),
                                 ..VolumeMount::default()
+                            },
+                        ]),
+                        ..Container::default()
+                    },
+                    Container {
+                        name: "watch".to_string(),
+                        image: image,
+                        command: vec!["/sidecar".to_string()].into(),
+                        env: Some(vec![
+                            EnvVar {
+                                name: "NDN_NETWORK_NAME".to_string(),
+                                value: Some(source.name_any()),
+                                ..EnvVar::default()
+                            },
+                            EnvVar {
+                                name: "NDN_NETWORK_NAMESPACE".to_string(),
+                                value_from: Some(EnvVarSource {
+                                    field_ref: Some(ObjectFieldSelector {
+                                        field_path: "metadata.namespace".to_string(),
+                                        ..ObjectFieldSelector::default()
+                                    }),
+                                    ..EnvVarSource::default()
+                                }),
+                                ..EnvVar::default()
+                            },
+                            EnvVar {
+                                name: "NDN_ROUTER_NAME".to_string(),
+                                value_from: Some(EnvVarSource {
+                                    field_ref: Some(ObjectFieldSelector {
+                                        field_path: "spec.nodeName".to_string(),
+                                        ..ObjectFieldSelector::default()
+                                    }),
+                                    ..EnvVarSource::default()
+                                }),
+                                ..EnvVar::default()
                             },
                         ]),
                         ..Container::default()
