@@ -79,15 +79,22 @@ async fn main() -> anyhow::Result<()> {
   let node_name = env::var("NDN_NODE_NAME")?;
   let socket_path = env::var("NDN_SOCKET_PATH").ok();
 
-  let ip4 = match local_ip_address::local_ip().ok() {
+  println!("debug");
+  let local_ip = local_ip_address::local_ip();
+  println!("local ip: {:?}", local_ip);
+  let ip4 = match local_ip.ok() {
     Some(ip) => {Some(ip.to_string())},
     None => None,
   };
+
+  let local_ipv6 = local_ip_address::local_ipv6();
+  println!("local ip6: {:?}", local_ipv6);
   let ip6 = match local_ip_address::local_ipv6().ok() {
     Some(ip) => {Some(ip.to_string())},
     None => None,
   };
-    
+  println!("local ip4: {:?}", ip4);
+  println!("local ip6: {:?}", ip6);
   // Generate Ndnd config
   let config = gen_config(network_name.clone(), router_name.clone(), socket_path);
   let config_str = serde_yaml::to_string(&config)?;
