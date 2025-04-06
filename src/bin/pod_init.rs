@@ -2,7 +2,7 @@
 use operator::{
   Result,
   Error,
-  crd::{create_owned_router, Network, Router, UDP_UNICAST_PORT},
+  crd::{create_owned_router, Network, Router, UDP_UNICAST_PORT, ROUTER_MANAGER_NAME},
   telemetry, NdndConfig,
   fw::{ForwarderConfig, FacesConfig, UdpConfig, UnixConfig},
   dv::RouterConfig,
@@ -21,8 +21,6 @@ struct Args {
     output: String,
 }
 
-pub static MANAGER_NAME: &str = "ndnd-init";
-
 struct CreateRouterParams {
   router_name: String,
   namespace: String,
@@ -40,7 +38,7 @@ async fn create_router(parent: &Network, client: Client, params: CreateRouterPar
     params.ip6,
     UDP_UNICAST_PORT);
   let api_router = Api::<Router>::namespaced(client, &params.namespace);
-  let serverside = PatchParams::apply(MANAGER_NAME);
+  let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
   api_router
       .patch(&params.router_name, &serverside, &Patch::Apply(router_data))
       .await

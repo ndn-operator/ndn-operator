@@ -64,8 +64,9 @@ impl Router {
         debug!("Reconciling router: {:?}", self);
         // Update status.neighbors of all other routers in the network
         let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
+        let my_network_name = self.labels().get(NETWORK_LABEL_KEY).ok_or(Error::OtherError("Network label not found".to_owned()))?;
         let lp = ListParams::default()
-            .labels(&format!("{}={}", NETWORK_LABEL_KEY, self.name_any()));
+            .labels(&format!("{NETWORK_LABEL_KEY}={my_network_name}"));
         api_router
             .list(&lp)
             .await
@@ -116,8 +117,9 @@ impl Router {
 
         // Update status.neighbors of all other routers in the network
         let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
+        let my_network_name = self.labels().get(NETWORK_LABEL_KEY).ok_or(Error::OtherError("Network label not found".to_owned()))?;
         let lp = ListParams::default()
-            .labels(&format!("{}={}", NETWORK_LABEL_KEY, self.name_any()));
+            .labels(&format!("{NETWORK_LABEL_KEY}={my_network_name}"));
         api_router
             .list(&lp)
             .await

@@ -1,14 +1,12 @@
 use operator::{
     Error,
-    crd::{Router, RouterStatus, NETWORK_LABEL_KEY}, telemetry
+    crd::{Router, RouterStatus, NETWORK_LABEL_KEY, ROUTER_MANAGER_NAME}, telemetry
 };
 use futures::TryStreamExt;
 use kube::{api::{ListParams, Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client, ResourceExt};
 use serde_json::json;
 use std::env;
 use tracing::*;
-
-pub static MANAGER_NAME: &str = "ndnd-watcher";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -42,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
             neighbors: neighbors_faces,
         }
     });
-    let serverside = PatchParams::apply(MANAGER_NAME);
+    let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
     let _o = api_router
             .patch_status(&my_router.name_any(), &serverside, &Patch::Merge(&status))
             .await

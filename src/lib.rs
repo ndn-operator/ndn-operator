@@ -15,6 +15,10 @@ pub enum Error {
     // NB: awkward type because finalizer::Error embeds the reconciler error (which is this)
     // so boxing this error to break cycles
     FinalizerError(#[source] Box<kube::runtime::finalizer::Error<Error>>),
+
+    /// NB: this is a catch-all for any other errors
+    #[error("Other Error: {0}")]
+    OtherError(String),
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
