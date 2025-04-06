@@ -30,7 +30,7 @@ async fn main() -> anyhow::Result<()> {
         .flat_map(|router| {
             let faces = &router.spec.faces;
             info!("Router {} faces: {:?}", router.name_any(), faces);
-            faces.to_vec()
+            faces.to_btree_set()
         })
         .collect();
 

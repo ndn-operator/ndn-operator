@@ -1,14 +1,18 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::{BTreeMap,BTreeSet}, sync::Arc};
 
-use kube::{api::ObjectMeta, runtime::{controller::Action, events::{Event, EventType}}, CustomResource, Resource, ResourceExt};
+use futures::TryFutureExt;
+use kube::{api::{ListParams, ObjectMeta, Patch, PatchParams}, runtime::{controller::Action, events::{Event, EventType}}, Api, CustomResource, Resource, ResourceExt};
 use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
+use serde_json::json;
 use serde_with::skip_serializing_none;
+use tracing::*;
 use super::Network;
 use crate::{Context, Error, Result};
 
 pub static NETWORK_LABEL_KEY: &str = "network.named-data.net/name";
 pub static ROUTER_FINALIZER: &str = "routers.named-data.net/finalizer";
+pub static ROUTER_MANAGER_NAME: &str = "router-controller";
 pub static UDP_UNICAST_PORT: i32 = 6363;
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
@@ -30,19 +34,19 @@ pub struct RouterFaces {
 }
 
 impl RouterFaces {
-    pub fn to_vec(&self) -> Vec<String> {
-        let mut faces = vec![];
-        if let Some(udp4) = &self.udp4 {
-            faces.push(udp4.clone());
+    pub fn to_btree_set(&self) -> BTreeSet<String> {
+        let mut faces = BTreeSet::new();
+        if let Some(ref udp4) = self.udp4 {
+            faces.insert(udp4.clone());
         }
-        if let Some(tcp4) = &self.tcp4 {
-            faces.push(tcp4.clone());
+        if let Some(ref tcp4) = self.tcp4 {
+            faces.insert(tcp4.clone());
         }
-        if let Some(udp6) = &self.udp6 {
-            faces.push(udp6.clone());
+        if let Some(ref udp6) = self.udp6 {
+            faces.insert(udp6.clone());
         }
-        if let Some(tcp6) = &self.tcp6 {
-            faces.push(tcp6.clone());
+        if let Some(ref tcp6) = self.tcp6 {
+            faces.insert(tcp6.clone());
         }
         faces
     }
@@ -51,19 +55,52 @@ impl RouterFaces {
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 pub struct RouterStatus {
     pub online: bool,
-    pub neighbors: Vec<String>,
+    pub neighbors: BTreeSet<String>,
 }
 
 impl Router {
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
+
+        // Update status.neighbors of all other routers in the network
+        let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
+        let lp = ListParams::default()
+            .labels(&format!("{}={}", NETWORK_LABEL_KEY, self.name_any()));
+        api_router
+            .list(&lp)
+            .await
+            .map_err(Error::KubeError)?
+            .iter()
+            .filter(|router| router.name_any() != self.name_any())
+            .for_each(|router| {
+                let current_neighbors = match &router.status {
+                    Some(status) => status.neighbors.clone(),
+                    None => BTreeSet::new(),
+                };
+                // add self.faces to the neighbors
+                let mut new_neighbors = current_neighbors.clone();
+                let faces = self.spec.faces.to_btree_set();
+                for face in faces {
+                    new_neighbors.insert(face);
+                }
+                let status = json!({
+                    "status": RouterStatus{
+                        online: true,
+                        neighbors: new_neighbors,
+                    }
+                });
+                info!("Updating status of router {}...", router.name_any());
+                let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
+                let _ = api_router.patch_status(&router.name_any(), &serverside, &Patch::Merge(&status))
+                    .map_err(Error::KubeError);
+            });
         // Publish event
         ctx.recorder
             .publish(
                 &Event {
                     type_: EventType::Normal,
-                    reason: "RouterCreated".into(),
-                    note: Some(format!("Created `{}` Router", self.name_any())),
-                    action: "Created".into(),
+                    reason: "RouterUpdated".into(),
+                    note: Some(format!("Updated `{}` Router", self.name_any())),
+                    action: "Updated".into(),
                     secondary: None,
                 },
                 &self.object_ref(&()),
@@ -72,7 +109,42 @@ impl Router {
             .map_err(Error::KubeError)?;
         Ok(Action::await_change())
     }
+
     pub async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action> {
+
+        // Update status.neighbors of all other routers in the network
+        let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
+        let lp = ListParams::default()
+            .labels(&format!("{}={}", NETWORK_LABEL_KEY, self.name_any()));
+        api_router
+            .list(&lp)
+            .await
+            .map_err(Error::KubeError)?
+            .iter()
+            .filter(|router| router.name_any() != self.name_any())
+            .for_each(|router| {
+                let current_neighbors = match &router.status {
+                    Some(status) => status.neighbors.clone(),
+                    None => BTreeSet::new(),
+                };
+                // remove self.faces from the neighbors
+                let mut new_neighbors = current_neighbors.clone();
+                let faces = self.spec.faces.to_btree_set();
+                for face in faces {
+                    new_neighbors.remove(&face);
+                }
+                let status = json!({
+                    "status": RouterStatus{
+                        online: false,
+                        neighbors: new_neighbors,
+                    }
+                });
+                info!("Updating status of router {}...", router.name_any());
+                let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
+                let _ = api_router.patch_status(&router.name_any(), &serverside, &Patch::Merge(&status))
+                    .map_err(Error::KubeError);
+            });
+
         // Publish event
         ctx.recorder
             .publish(
@@ -130,7 +202,7 @@ pub fn create_owned_router(source: &Network, name: String, node_name: String, ip
         },
         status: Some(RouterStatus {
             online: false,
-            neighbors: vec![],
+            neighbors: BTreeSet::new(),
         }),
     }
 }

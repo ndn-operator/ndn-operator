@@ -13,7 +13,7 @@ use schemars::JsonSchema;
 use serde_json::json;
 
 pub static NETWORK_FINALIZER: &str = "networks.named-data.net/finalizer";
-pub static MANAGER_NAME: &str = "ndnd-controller";
+pub static NETWORK_MANAGER_NAME: &str = "network-controller";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[kube(group = "named-data.net", version = "v1alpha1", kind = "Network", namespaced, shortname = "ndn")]
@@ -32,7 +32,7 @@ impl Network {
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
         let api_nw: Api<Network> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let api_ds: Api<DaemonSet> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
-        let serverside = PatchParams::apply(MANAGER_NAME);
+        let serverside = PatchParams::apply(NETWORK_MANAGER_NAME);
         let my_pod_spec = get_my_pod(ctx.client.clone())
             .await
             .expect("Failed to get my pod")
