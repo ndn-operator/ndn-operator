@@ -31,12 +31,18 @@ spec:
           status:
             nullable: true
             properties:
-              faces:
-                items:
-                  type: string
-                type: array
-            required:
-            - faces
+              tcp4:
+                nullable: true
+                type: string
+              tcp6:
+                nullable: true
+                type: string
+              udp4:
+                nullable: true
+                type: string
+              udp6:
+                nullable: true
+                type: string
             type: object
         required:
         - spec

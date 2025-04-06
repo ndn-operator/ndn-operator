@@ -21,6 +21,9 @@ spec:
         properties:
           spec:
             properties:
+              node_selector:
+                nullable: true
+                type: string
               prefix:
                 type: string
             required:

@@ -3,7 +3,6 @@ use controller::crd::{create_owned_router, Network, Router, UDP_UNICAST_PORT};
 use controller::NdndConfig;
 use controller::dv::RouterConfig;
 use controller::fw::{ForwarderConfig, FacesConfig, UdpConfig, UnixConfig};
-use controller::helper::*;
 use clap::Parser;
 use kube::api::{Api, Patch, PatchParams};
 use kube::Client;
@@ -21,14 +20,26 @@ struct Args {
 
 pub static MANAGER_NAME: &str = "ndnd-init";
 
-async fn create_router(parent: &Network, router_name: String, namespace: &str, client: Client, ip4: Option<String>, ip6: Option<String>) -> Result<Router> {
-  let my_pod = get_my_pod(client.clone()).await?;
-  let my_node_name = my_pod.spec.expect("Failed to get pod spec").node_name.expect("Failed to get node name");
-  let router_data = create_owned_router(parent, router_name.clone(), my_node_name, ip4, ip6, UDP_UNICAST_PORT);
-  let api_router = Api::<Router>::namespaced(client, namespace);
+struct CreateRouterParams {
+  router_name: String,
+  namespace: String,
+  node_name: String,
+  ip4: Option<String>,
+  ip6: Option<String>,
+}
+
+async fn create_router(parent: &Network, client: Client, params: CreateRouterParams) -> Result<Router> {
+  let router_data = create_owned_router(
+    parent,
+    params.router_name.clone(),
+    params.node_name,
+    params.ip4,
+    params.ip6,
+    UDP_UNICAST_PORT);
+  let api_router = Api::<Router>::namespaced(client, &params.namespace);
   let serverside = PatchParams::apply(MANAGER_NAME);
   api_router
-      .patch(&router_name, &serverside, &Patch::Apply(router_data))
+      .patch(&params.router_name, &serverside, &Patch::Apply(router_data))
       .await
       .map_err(Error::KubeError)
 }
@@ -65,6 +76,7 @@ async fn main() -> anyhow::Result<()> {
   let network_name = env::var("NDN_NETWORK_NAME")?;
   let network_namespace = env::var("NDN_NETWORK_NAMESPACE")?;
   let router_name = env::var("NDN_ROUTER_NAME")?;
+  let node_name = env::var("NDN_NODE_NAME")?;
   let socket_path = env::var("NDN_SOCKET_PATH").ok();
 
   let ip4 = match local_ip_address::local_ip().ok() {
@@ -86,6 +98,16 @@ async fn main() -> anyhow::Result<()> {
   let client = Client::try_default().await?;
   let api_nw: Api<Network> = Api::namespaced(client.clone(), &network_namespace);
   let nw = api_nw.get(&network_name).await?;
-  let _ = create_router(&nw, router_name, &network_namespace, client, ip4, ip6).await?;
+  let _ = create_router(
+    &nw,
+    client,
+    CreateRouterParams {
+      router_name: router_name,
+      namespace: network_namespace,
+      node_name: node_name,
+      ip4,
+      ip6,
+    },
+  ).await?;
   Ok(())
 }
