@@ -66,7 +66,7 @@ impl Network {
             .patch_status(&self.name_any(), &serverside, &Patch::Merge(&status))
             .await
             .map_err(Error::KubeError)?;
-        Ok(Action::requeue(Duration::from_secs(5 * 60)))
+        Ok(Action::await_change())
     }
 
     pub async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action> {

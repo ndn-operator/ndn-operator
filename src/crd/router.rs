@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use kube::{api::ObjectMeta, runtime::{controller::Action, events::{Event, EventType}}, Api, CustomResource, Resource, ResourceExt};
+use kube::{api::ObjectMeta, runtime::{controller::Action, events::{Event, EventType}}, CustomResource, Resource, ResourceExt};
 use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
 use super::Network;
@@ -44,7 +44,7 @@ impl Router {
             )
             .await
             .map_err(Error::KubeError)?;
-        Ok(Action::requeue(Duration::from_secs(30)))
+        Ok(Action::await_change())
     }
     pub async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action> {
         // Publish event
@@ -61,7 +61,7 @@ impl Router {
             )
             .await
             .map_err(Error::KubeError)?;
-        Ok(Action::requeue(Duration::from_secs(30)))
+        Ok(Action::await_change())
     }
 }
 

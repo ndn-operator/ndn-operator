@@ -113,7 +113,7 @@ fn router_error_policy(_: Arc<Router>, error: &Error, _: Arc<Context>) -> Action
     Action::requeue(Duration::from_secs(5 * 60))
 }
 
-pub async fn run(state: State) {
+pub async fn run_nw(state: State) {
     let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
     let api_nw = Api::<Network>::all(client.clone());
     if let Err(e) = api_nw.list(&ListParams::default().limit(1)).await {
@@ -121,23 +121,24 @@ pub async fn run(state: State) {
         info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
         std::process::exit(1);
     }
-    let network_controller = Controller::new(api_nw, watcher::Config::default().any_semantic())
+    Controller::new(api_nw, watcher::Config::default().any_semantic())
         .shutdown_on_signal()
         .run(reconcile_network, network_error_policy, state.to_context(client.clone()).await)
         .filter_map(async |x| { std::result::Result::ok(x) })
-        .for_each(|_| futures::future::ready(()));
+        .for_each(|_| futures::future::ready(())).await;
+}
 
-    let api_routers = Api::<Router>::all(client.clone());
-    if let Err(e) = api_routers.list(&ListParams::default().limit(1)).await {
+pub async fn run_router(state: State) {
+    let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
+    let api_router = Api::<Router>::all(client.clone());
+    if let Err(e) = api_router.list(&ListParams::default().limit(1)).await {
         error!("Router CRD is not queryable; {e:?}. Is the CRD installed?");
         info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
         std::process::exit(1);
     }
-    let router_controller = Controller::new(api_routers, watcher::Config::default().any_semantic())
+    Controller::new(api_router, watcher::Config::default().any_semantic())
         .shutdown_on_signal()
         .run(reconcile_router, router_error_policy, state.to_context(client.clone()).await)
         .filter_map(async |x| { std::result::Result::ok(x) })
-        .for_each(|_| futures::future::ready(()));
-
-    tokio::join!(network_controller, router_controller);
+        .for_each(|_| futures::future::ready(())).await;
 }
