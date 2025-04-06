@@ -1,10 +1,9 @@
 
 use std::env;
 
-use futures::pin_mut;
 use controller::{crd::{Router, RouterStatus, NETWORK_LABEL_KEY}, telemetry};
-use futures::StreamExt;
-use kube::{api::{DeleteParams, ListParams, Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client, ResourceExt};
+use futures::TryStreamExt;
+use kube::{api::{ListParams, Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client, ResourceExt};
 use controller::Error;
 use serde_json::json;
 use tracing::*;
@@ -43,40 +42,18 @@ async fn main() -> anyhow::Result<()> {
             .patch_status(&my_router.name_any(), &serverside, &Patch::Merge(&status))
             .await
             .map_err(Error::KubeError)?;
-
-    info!("Starting watcher...");
-    // Watch for new routers in the network
-    let wc = watcher::Config::default().streaming_lists();
-    let watch_stream = watcher(api_router.clone(), wc).applied_objects();
-    pin_mut!(watch_stream);
-    loop {
-        tokio::select! {
-            Some(event) = watch_stream.next() => {
-                match event {
-                    Ok(router) => {
-                        if router.name_any() != my_router_name {
-                            info!("Found new router: {} in network: {}", router.name_any(), network_name);
-                        }
-                    },
-                    Err(e) => error!("Error watching routers: {}", e),
-                }
+    // Watch my_router and print the changes
+    let wc = watcher::Config::default()
+        .fields(format!("metadata.name={}", my_router_name).as_str());
+    watcher(api_router, wc)
+        .default_backoff()
+        .applied_objects()
+        .try_for_each(async |router| {
+            info!("Router {} changed: {:?}", router.name_any(), router);
+            if let Some(ref status) = router.status {
+                info!("Router {} status: {:?}", router.name_any(), status);
             }
-            // Handle shutdown signal
-            _ = tokio::signal::ctrl_c() => {
-                info!("Received shutdown signal");
-                delete_router(&api_router, &my_router_name).await?;
-                info!("Deleted router: {}", my_router_name);
-                break;
-            }
-        }
-    };
-    Ok(())
-}
-
-async fn delete_router(api_router: &Api<Router>, name: &str) -> anyhow::Result<()> {
-    let dp = DeleteParams::default();
-    let _o = api_router
-        .delete(name, &dp).await
-        .map_err(Error::KubeError)?;
+            Ok(())
+        }).await?;
     Ok(())
 }

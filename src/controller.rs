@@ -1,4 +1,4 @@
-use crate::{crd::{NETWORK_FINALIZER, Network}, Error, Result};
+use crate::{crd::{Network, Router, NETWORK_FINALIZER, ROUTER_FINALIZER}, Error, Result};
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
 
@@ -28,15 +28,30 @@ pub struct Context {
     pub diagnostics: Arc<RwLock<Diagnostics>>,
 }
 
-async fn reconcile(network: Arc<Network>, ctx: Arc<Context>) -> Result<Action> {
+async fn reconcile_network(network: Arc<Network>, ctx: Arc<Context>) -> Result<Action> {
     let ns = network.namespace().unwrap();
-    let networks: Api<Network> = Api::namespaced(ctx.client.clone(), &ns);
+    let api_nw: Api<Network> = Api::namespaced(ctx.client.clone(), &ns);
 
     info!("Reconciling Network \"{}\" in {}", network.name_any(), ns);
-    finalizer(&networks, NETWORK_FINALIZER, network, |event| async {
+    finalizer(&api_nw, NETWORK_FINALIZER, network, |event| async {
         match event {
             Finalizer::Apply(network) => network.reconcile(ctx.clone()).await,
             Finalizer::Cleanup(network) => network.cleanup(ctx.clone()).await,
+        }
+    })
+    .await
+    .map_err(|e| Error::FinalizerError(Box::new(e)))
+}
+
+async fn reconcile_router(router: Arc<Router>, ctx: Arc<Context>) -> Result<Action> {
+    let ns = router.namespace().unwrap();
+    let api_router: Api<Router> = Api::namespaced(ctx.client.clone(), &ns);
+
+    info!("Reconciling Router \"{}\" in {}", router.name_any(), ns);
+    finalizer(&api_router, ROUTER_FINALIZER, router, |event| async {
+        match event {
+            Finalizer::Apply(router) => router.reconcile(ctx.clone()).await,
+            Finalizer::Cleanup(router) => router.cleanup(ctx.clone()).await,
         }
     })
     .await
@@ -88,23 +103,41 @@ impl State {
     }
 }
 
-fn error_policy(_: Arc<Network>, error: &Error, _: Arc<Context>) -> Action {
+fn network_error_policy(_: Arc<Network>, error: &Error, _: Arc<Context>) -> Action {
+    warn!("reconcile failed: {:?}", error);
+    Action::requeue(Duration::from_secs(5 * 60))
+}
+
+fn router_error_policy(_: Arc<Router>, error: &Error, _: Arc<Context>) -> Action {
     warn!("reconcile failed: {:?}", error);
     Action::requeue(Duration::from_secs(5 * 60))
 }
 
 pub async fn run(state: State) {
     let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
-    let api_networks = Api::<Network>::all(client.clone());
-    if let Err(e) = api_networks.list(&ListParams::default().limit(1)).await {
-        error!("CRD is not queryable; {e:?}. Is the CRD installed?");
+    let api_nw = Api::<Network>::all(client.clone());
+    if let Err(e) = api_nw.list(&ListParams::default().limit(1)).await {
+        error!("Network CRD is not queryable; {e:?}. Is the CRD installed?");
         info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
         std::process::exit(1);
     }
-    Controller::new(api_networks, watcher::Config::default().any_semantic())
+    let network_controller = Controller::new(api_nw, watcher::Config::default().any_semantic())
         .shutdown_on_signal()
-        .run(reconcile, error_policy, state.to_context(client.clone()).await)
+        .run(reconcile_network, network_error_policy, state.to_context(client.clone()).await)
         .filter_map(async |x| { std::result::Result::ok(x) })
-        .for_each(|_| futures::future::ready(()))
-        .await;
+        .for_each(|_| futures::future::ready(()));
+
+    let api_routers = Api::<Router>::all(client.clone());
+    if let Err(e) = api_routers.list(&ListParams::default().limit(1)).await {
+        error!("Router CRD is not queryable; {e:?}. Is the CRD installed?");
+        info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
+        std::process::exit(1);
+    }
+    let router_controller = Controller::new(api_routers, watcher::Config::default().any_semantic())
+        .shutdown_on_signal()
+        .run(reconcile_router, router_error_policy, state.to_context(client.clone()).await)
+        .filter_map(async |x| { std::result::Result::ok(x) })
+        .for_each(|_| futures::future::ready(()));
+
+    tokio::join!(network_controller, router_controller);
 }
