@@ -1,8 +1,9 @@
 
 use std::env;
 
+use futures::pin_mut;
 use controller::crd::{Router, RouterStatus, NETWORK_LABEL_KEY};
-use futures::TryStreamExt;
+use futures::StreamExt;
 use kube::{api::{ListParams, Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client, ResourceExt};
 use controller::Error;
 use serde_json::json;
@@ -42,15 +43,29 @@ async fn main() -> anyhow::Result<()> {
             .await
             .map_err(Error::KubeError)?;
 
+    info!("Starting watcher...");
     // Watch for new routers in the network
     let wc = watcher::Config::default().streaming_lists();
-    watcher(api_router, wc)
-        .applied_objects()
-        .default_backoff()
-        .try_for_each(async |router| {
-            info!("Saw router: {} in network: {}", router.name_any(), network_name);
-            Ok(())
-        })
-        .await?;
+    let watch_stream = watcher(api_router, wc).applied_objects();
+    pin_mut!(watch_stream);
+    loop {
+        tokio::select! {
+            Some(event) = watch_stream.next() => {
+                match event {
+                    Ok(router) => {
+                        if router.name_any() != my_router_name {
+                            info!("Found new router: {} in network: {}", router.name_any(), network_name);
+                        }
+                    },
+                    Err(e) => error!("Error watching routers: {}", e),
+                }
+            }
+            // Handle shutdown signal
+            _ = tokio::signal::ctrl_c() => {
+                info!("Received shutdown signal");
+                break;
+            }
+        }
+    };
     Ok(())
 }
