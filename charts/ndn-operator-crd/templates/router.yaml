@@ -24,13 +24,6 @@ spec:
                 type: string
               prefix:
                 type: string
-            required:
-            - node
-            - prefix
-            type: object
-          status:
-            nullable: true
-            properties:
               tcp4:
                 nullable: true
                 type: string
@@ -43,6 +36,17 @@ spec:
               udp6:
                 nullable: true
                 type: string
+            required:
+            - node
+            - prefix
+            type: object
+          status:
+            nullable: true
+            properties:
+              online:
+                type: boolean
+            required:
+            - online
             type: object
         required:
         - spec

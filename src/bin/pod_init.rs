@@ -79,7 +79,6 @@ async fn main() -> anyhow::Result<()> {
   let node_name = env::var("NDN_NODE_NAME")?;
   let socket_path = env::var("NDN_SOCKET_PATH").ok();
 
-  println!("debug");
   let local_ip = local_ip_address::local_ip();
   println!("local ip: {:?}", local_ip);
   let ip4 = match local_ip.ok() {

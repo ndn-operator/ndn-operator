@@ -14,14 +14,15 @@ pub static UDP_UNICAST_PORT: i32 = 6363;
 pub struct RouterSpec {
     prefix: String,
     node: String,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
-pub struct RouterStatus {
     udp4: Option<String>,
     tcp4: Option<String>,
     udp6: Option<String>,
     tcp6: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct RouterStatus {
+    pub online: bool,
 }
 
 pub fn create_owned_router(source: &Network, name: String, node_name: String, ip4: Option<String>, ip6: Option<String>, udp_unicast_port: i32) -> Router {
@@ -42,8 +43,6 @@ pub fn create_owned_router(source: &Network, name: String, node_name: String, ip
         spec: RouterSpec {
             prefix: source.spec.prefix.clone(),
             node: node_name,
-        },
-        status: Some(RouterStatus {
             udp4: {
                 if let Some(ip4) = ip4 {
                     Some(format!("udp://{ip4}:{udp_unicast_port}"))
@@ -60,6 +59,9 @@ pub fn create_owned_router(source: &Network, name: String, node_name: String, ip
                 }
             },
             tcp6: None,
+        },
+        status: Some(RouterStatus {
+            online: false,
         }),
     }
 }
