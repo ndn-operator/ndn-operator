@@ -20,21 +20,26 @@ async fn main() -> anyhow::Result<()> {
     let api_router = Api::<Router>::namespaced(client, &network_namespace);
     let lp = ListParams::default()
         .labels(&format!("{}={network_name}", NETWORK_LABEL_KEY));
-    // Print every router in the network except the one we are running
-    api_router.list(&lp)
+    // Find spec.faces of every router in the network except the one we are running
+    let neighbors_faces = api_router
+        .list(&lp)
         .await
         .map_err(Error::KubeError)?
         .iter()
         .filter(|router| router.name_any() != my_router_name)
-        .for_each(|router| {
-            info!("Found router: {} in network: {}", router.name_any(), network_name);
-        });
+        .flat_map(|router| {
+            let faces = &router.spec.faces;
+            info!("Router {} faces: {:?}", router.name_any(), faces);
+            faces.to_vec()
+        })
+        .collect();
 
     // Update the status of the router we are running
     let my_router = api_router.get(&my_router_name).await.map_err(Error::KubeError)?;
     let status = json!({
         "status": RouterStatus{
             online: true,
+            neighbors: neighbors_faces,
         }
     });
     let serverside = PatchParams::apply(MANAGER_NAME);

@@ -11,7 +11,6 @@ use kube::{
 use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
 use serde_json::json;
-use tokio::time::Duration;
 
 pub static NETWORK_FINALIZER: &str = "networks.named-data.net/finalizer";
 pub static MANAGER_NAME: &str = "ndnd-controller";
