@@ -1,6 +1,6 @@
 
 use controller::crd::{create_owned_router, Network, Router, UDP_UNICAST_PORT};
-use controller::NdndConfig;
+use controller::{telemetry, NdndConfig};
 use controller::dv::RouterConfig;
 use controller::fw::{ForwarderConfig, FacesConfig, UdpConfig, UnixConfig};
 use clap::Parser;
@@ -72,6 +72,7 @@ fn gen_config(network_name: String, router_name: String, socket_path: Option<Str
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+  telemetry::init().await;
   let args = Args::parse();
   let network_name = env::var("NDN_NETWORK_NAME")?;
   let network_namespace = env::var("NDN_NETWORK_NAMESPACE")?;

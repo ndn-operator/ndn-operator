@@ -2,9 +2,9 @@
 use std::env;
 
 use futures::pin_mut;
-use controller::crd::{Router, RouterStatus, NETWORK_LABEL_KEY};
+use controller::{crd::{Router, RouterStatus, NETWORK_LABEL_KEY}, telemetry};
 use futures::StreamExt;
-use kube::{api::{ListParams, Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client, ResourceExt};
+use kube::{api::{DeleteParams, ListParams, Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client, ResourceExt};
 use controller::Error;
 use serde_json::json;
 use tracing::*;
@@ -13,6 +13,7 @@ pub static MANAGER_NAME: &str = "ndnd-watcher";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    telemetry::init().await;
     let network_name = env::var("NDN_NETWORK_NAME")?;
     let network_namespace = env::var("NDN_NETWORK_NAMESPACE")?;
     let my_router_name = env::var("NDN_ROUTER_NAME")?;
@@ -46,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting watcher...");
     // Watch for new routers in the network
     let wc = watcher::Config::default().streaming_lists();
-    let watch_stream = watcher(api_router, wc).applied_objects();
+    let watch_stream = watcher(api_router.clone(), wc).applied_objects();
     pin_mut!(watch_stream);
     loop {
         tokio::select! {
@@ -63,9 +64,19 @@ async fn main() -> anyhow::Result<()> {
             // Handle shutdown signal
             _ = tokio::signal::ctrl_c() => {
                 info!("Received shutdown signal");
+                delete_router(&api_router, &my_router_name).await?;
+                info!("Deleted router: {}", my_router_name);
                 break;
             }
         }
     };
+    Ok(())
+}
+
+async fn delete_router(api_router: &Api<Router>, name: &str) -> anyhow::Result<()> {
+    let dp = DeleteParams::default();
+    let _o = api_router
+        .delete(name, &dp).await
+        .map_err(Error::KubeError)?;
     Ok(())
 }
