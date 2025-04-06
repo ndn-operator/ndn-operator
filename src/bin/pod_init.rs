@@ -1,13 +1,16 @@
 
-use controller::crd::{create_owned_router, Network, Router, UDP_UNICAST_PORT};
-use controller::{telemetry, NdndConfig};
-use controller::dv::RouterConfig;
-use controller::fw::{ForwarderConfig, FacesConfig, UdpConfig, UnixConfig};
+use operator::{
+  Result,
+  Error,
+  crd::{create_owned_router, Network, Router, UDP_UNICAST_PORT},
+  telemetry, NdndConfig,
+  fw::{ForwarderConfig, FacesConfig, UdpConfig, UnixConfig},
+  dv::RouterConfig,
+};
 use clap::Parser;
 use kube::api::{Api, Patch, PatchParams};
 use kube::Client;
 use std::env;
-use controller::{Result, Error};
 
 /// Generate config file for ndnd
 #[derive(Parser, Debug)]

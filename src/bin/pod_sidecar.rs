@@ -1,11 +1,11 @@
-
-use std::env;
-
-use controller::{crd::{Router, RouterStatus, NETWORK_LABEL_KEY}, telemetry};
+use operator::{
+    Error,
+    crd::{Router, RouterStatus, NETWORK_LABEL_KEY}, telemetry
+};
 use futures::TryStreamExt;
 use kube::{api::{ListParams, Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client, ResourceExt};
-use controller::Error;
 use serde_json::json;
+use std::env;
 use tracing::*;
 
 pub static MANAGER_NAME: &str = "ndnd-watcher";

@@ -61,6 +61,7 @@ pub struct RouterStatus {
 impl Router {
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
 
+        debug!("Reconciling router: {:?}", self);
         // Update status.neighbors of all other routers in the network
         let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let lp = ListParams::default()
@@ -72,6 +73,7 @@ impl Router {
             .iter()
             .filter(|router| router.name_any() != self.name_any())
             .for_each(|router| {
+                debug!("Router {} faces: {:?}", router.name_any(), router.spec.faces);
                 let current_neighbors = match &router.status {
                     Some(status) => status.neighbors.clone(),
                     None => BTreeSet::new(),
