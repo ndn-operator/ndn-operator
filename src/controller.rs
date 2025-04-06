@@ -33,7 +33,7 @@ async fn reconcile_network(network: Arc<Network>, ctx: Arc<Context>) -> Result<A
     let api_nw: Api<Network> = Api::namespaced(ctx.client.clone(), &ns);
 
     info!("Reconciling Network \"{}\" in {}", network.name_any(), ns);
-    finalizer(&api_nw, NETWORK_FINALIZER, network, |event| async {
+    finalizer(&api_nw, NETWORK_FINALIZER, network, async |event| {
         match event {
             Finalizer::Apply(network) => network.reconcile(ctx.clone()).await,
             Finalizer::Cleanup(network) => network.cleanup(ctx.clone()).await,
@@ -48,7 +48,7 @@ async fn reconcile_router(router: Arc<Router>, ctx: Arc<Context>) -> Result<Acti
     let api_router: Api<Router> = Api::namespaced(ctx.client.clone(), &ns);
 
     info!("Reconciling Router \"{}\" in {}", router.name_any(), ns);
-    finalizer(&api_router, ROUTER_FINALIZER, router, |event| async {
+    finalizer(&api_router, ROUTER_FINALIZER, router, async |event| {
         match event {
             Finalizer::Apply(router) => router.reconcile(ctx.clone()).await,
             Finalizer::Cleanup(router) => router.cleanup(ctx.clone()).await,
@@ -125,7 +125,7 @@ pub async fn run_nw(state: State) {
         .shutdown_on_signal()
         .run(reconcile_network, network_error_policy, state.to_context(client.clone()).await)
         .filter_map(async |x| { std::result::Result::ok(x) })
-        .for_each(|_| futures::future::ready(())).await;
+        .for_each(async |_| () ).await;
 }
 
 pub async fn run_router(state: State) {
@@ -140,5 +140,5 @@ pub async fn run_router(state: State) {
         .shutdown_on_signal()
         .run(reconcile_router, router_error_policy, state.to_context(client.clone()).await)
         .filter_map(async |x| { std::result::Result::ok(x) })
-        .for_each(|_| futures::future::ready(())).await;
+        .for_each(async |_| ()).await;
 }
