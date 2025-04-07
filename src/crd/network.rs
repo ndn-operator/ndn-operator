@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 use crate::{daemonset::*, helper::*, Context, Error, Result};
 use k8s_openapi::api::apps::v1::DaemonSet;
 use kube::{
@@ -22,7 +22,7 @@ pub static NETWORK_MANAGER_NAME: &str = "network-controller";
 pub struct NetworkSpec {
     pub prefix: String,
     pub udp_unicast_port: i32,
-    pub node_selector: Option<String>,
+    pub node_selector: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]

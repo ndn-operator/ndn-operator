@@ -36,6 +36,7 @@ pub fn create_owned_daemonset(source: &Network, image: Option<String>, service_a
                     service_account_name: service_account,
                     host_network: Some(true),
                     dns_policy: Some("ClusterFirstWithHostNet".to_string()),
+                    node_selector: source.spec.node_selector.clone(),
                     init_containers: Some(vec![Container {
                         name: "init".to_string(),
                         image: image.clone(),

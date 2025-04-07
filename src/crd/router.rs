@@ -23,8 +23,8 @@ pub struct RouterSpec {
     pub faces: RouterFaces,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RouterFaces {
     udp4: Option<String>,
