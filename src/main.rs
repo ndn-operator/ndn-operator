@@ -1,5 +1,5 @@
 use actix_web::{get, middleware, web::Data, App, HttpRequest, HttpResponse, HttpServer, Responder};
-pub use controller::{self, telemetry, State};
+pub use operator::{self, telemetry, State};
 
 #[get("/health")]
 async fn health(_: HttpRequest) -> impl Responder {
@@ -18,7 +18,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Initiatilize Kubernetes controller state
     let state = State::default();
-    let controller = controller::run(state.clone());
+    let nw_ctrl = operator::run_nw(state.clone());
+    let rt_ctrl = operator::run_router(state.clone());
     let server =  HttpServer::new(move || {
         App::new()
             .app_data(Data::new(state.clone()))
@@ -29,7 +30,8 @@ async fn main() -> anyhow::Result<()> {
     .bind("0.0.0.0:8080")?
     .shutdown_timeout(5);
 
-    // Both runtimes implements graceful shutdown, so poll until both are done
-    tokio::join!(controller, server.run()).1?;
+    // All runtimes implements graceful shutdown, so poll until all are done
+    let (_, _, server_result) = tokio::join!(nw_ctrl, rt_ctrl, server.run());
+    server_result?;
     Ok(())
 }

@@ -20,23 +20,42 @@ spec:
         properties:
           spec:
             properties:
+              faces:
+                properties:
+                  tcp4:
+                    nullable: true
+                    type: string
+                  tcp6:
+                    nullable: true
+                    type: string
+                  udp4:
+                    nullable: true
+                    type: string
+                  udp6:
+                    nullable: true
+                    type: string
+                type: object
               node:
                 type: string
               prefix:
                 type: string
             required:
+            - faces
             - node
             - prefix
             type: object
           status:
             nullable: true
             properties:
-              faces:
+              neighbors:
                 items:
                   type: string
                 type: array
+              online:
+                type: boolean
             required:
-            - faces
+            - neighbors
+            - online
             type: object
         required:
         - spec

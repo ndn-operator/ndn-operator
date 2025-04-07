@@ -4,3 +4,4 @@ metadata:
   name: test
 spec:
   prefix: /test
+  udpUnicastPort: 6363

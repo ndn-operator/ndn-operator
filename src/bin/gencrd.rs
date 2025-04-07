@@ -1,5 +1,5 @@
 use kube::CustomResourceExt;
-use controller::crd::{Network, Router};
+use operator::crd::{Network, Router};
 use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]

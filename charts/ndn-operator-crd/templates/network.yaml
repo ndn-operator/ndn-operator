@@ -21,15 +21,22 @@ spec:
         properties:
           spec:
             properties:
+              nodeSelector:
+                nullable: true
+                type: string
               prefix:
                 type: string
+              udpUnicastPort:
+                format: int32
+                type: integer
             required:
             - prefix
+            - udpUnicastPort
             type: object
           status:
             nullable: true
             properties:
-              ds_created:
+              dsCreated:
                 nullable: true
                 type: boolean
             type: object
