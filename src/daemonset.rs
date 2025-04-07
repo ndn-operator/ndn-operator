@@ -47,6 +47,11 @@ pub fn create_owned_daemonset(source: &Network, image: Option<String>, service_a
                                 ..EnvVar::default()
                             },
                             EnvVar {
+                                name: "NDN_UDP_UNICAST_PORT".to_string(),
+                                value: Some(source.spec.udp_unicast_port.to_string()),
+                                ..EnvVar::default()
+                            },
+                            EnvVar {
                                 name: "NDN_NETWORK_NAMESPACE".to_string(),
                                 value_from: Some(EnvVarSource {
                                     field_ref: Some(ObjectFieldSelector {

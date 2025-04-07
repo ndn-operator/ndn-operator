@@ -2,7 +2,7 @@
 use operator::{
   Result,
   Error,
-  crd::{create_owned_router, Network, Router, UDP_UNICAST_PORT, ROUTER_MANAGER_NAME},
+  crd::{create_owned_router, Network, Router, ROUTER_MANAGER_NAME},
   telemetry, NdndConfig,
   fw::{ForwarderConfig, FacesConfig, UdpConfig, UnixConfig},
   dv::RouterConfig,
@@ -36,7 +36,7 @@ async fn create_router(parent: &Network, client: Client, params: CreateRouterPar
     params.node_name,
     params.ip4,
     params.ip6,
-    UDP_UNICAST_PORT);
+    parent.spec.udp_unicast_port);
   let api_router = Api::<Router>::namespaced(client, &params.namespace);
   let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
   api_router
@@ -45,7 +45,7 @@ async fn create_router(parent: &Network, client: Client, params: CreateRouterPar
       .map_err(Error::KubeError)
 }
 
-fn gen_config(network_name: String, router_name: String, socket_path: Option<String> ) -> NdndConfig {
+fn gen_config(network_name: String, router_name: String, udp_unicast_port: i32, socket_path: Option<String> ) -> NdndConfig {
 
   NdndConfig {
     dv: RouterConfig {
@@ -57,7 +57,7 @@ fn gen_config(network_name: String, router_name: String, socket_path: Option<Str
       faces: FacesConfig {
         udp: Some(UdpConfig {
           enabled_unicast: true,
-          port_unicast: Some(UDP_UNICAST_PORT),
+          port_unicast: Some(udp_unicast_port),
           ..UdpConfig::default()
         }),
         unix: Some(UnixConfig {
@@ -79,6 +79,7 @@ async fn main() -> anyhow::Result<()> {
   let network_namespace = env::var("NDN_NETWORK_NAMESPACE")?;
   let router_name = env::var("NDN_ROUTER_NAME")?;
   let node_name = env::var("NDN_NODE_NAME")?;
+  let udp_unicast_port = env::var("NDN_UDP_UNICAST_PORT")?.parse::<i32>()?;
   let socket_path = env::var("NDN_SOCKET_PATH").ok();
 
   let local_ip = local_ip_address::local_ip();
@@ -97,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
   println!("local ip4: {:?}", ip4);
   println!("local ip6: {:?}", ip6);
   // Generate Ndnd config
-  let config = gen_config(network_name.clone(), router_name.clone(), socket_path);
+  let config = gen_config(network_name.clone(), router_name.clone(), udp_unicast_port, socket_path);
   let config_str = serde_yaml::to_string(&config)?;
   std::fs::write(args.output, config_str.clone())?;
   println!("{}", config_str);

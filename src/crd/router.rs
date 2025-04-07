@@ -12,7 +12,6 @@ use crate::{Context, Error, Result};
 pub static NETWORK_LABEL_KEY: &str = "network.named-data.net/name";
 pub static ROUTER_FINALIZER: &str = "routers.named-data.net/finalizer";
 pub static ROUTER_MANAGER_NAME: &str = "router-controller";
-pub static UDP_UNICAST_PORT: i32 = 6363;
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
