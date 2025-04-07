@@ -85,17 +85,39 @@ impl Router {
             for face in faces {
                 new_neighbors.insert(face);
             }
+            // get current status
+            let current_status = match &router.status {
+                Some(status) => status.clone(),
+                None => RouterStatus {
+                    online: false,
+                    neighbors: BTreeSet::new(),
+                },
+            };
             let status = json!({
                 "status": RouterStatus{
-                    online: true,
+                    online: current_status.online,
                     neighbors: new_neighbors,
                 }
             });
-            info!("Updating status of router {}...", router.name_any());
+            info!("Updating neigbors of router {}...", router.name_any());
             debug!("Status: {:?}", status);
             let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
             let _ = api_router.patch_status(&router.name_any(), &serverside, &Patch::Merge(&status)).await
                 .map_err(Error::KubeError);
+
+            ctx.recorder
+                .publish(
+                    &Event {
+                        type_: EventType::Normal,
+                        reason: "NeighborsInserted".into(),
+                        note: Some(format!("From `{}` Router", self.name_any())),
+                        action: "Updated".into(),
+                        secondary: None,
+                    },
+                    &router.object_ref(&()),
+                )
+                .await
+                .map_err(Error::KubeError)?;
         }
         // Publish event
         ctx.recorder
@@ -103,7 +125,7 @@ impl Router {
                 &Event {
                     type_: EventType::Normal,
                     reason: "RouterUpdated".into(),
-                    note: Some(format!("Updated `{}` Router", self.name_any())),
+                    note: Some(format!("Propagated my faces to all routers in the network")),
                     action: "Updated".into(),
                     secondary: None,
                 },
@@ -138,9 +160,17 @@ impl Router {
             for face in faces {
                 new_neighbors.remove(&face);
             }
+            // get current status
+            let current_status = match &router.status {
+                Some(status) => status.clone(),
+                None => RouterStatus {
+                    online: false,
+                    neighbors: BTreeSet::new(),
+                },
+            };
             let status = json!({
                 "status": RouterStatus{
-                    online: true,
+                    online: current_status.online,
                     neighbors: new_neighbors,
                 }
             });
@@ -149,6 +179,19 @@ impl Router {
             let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
             let _ = api_router.patch_status(&router.name_any(), &serverside, &Patch::Merge(&status)).await
                 .map_err(Error::KubeError);
+            ctx.recorder
+                .publish(
+                    &Event {
+                        type_: EventType::Normal,
+                        reason: "NeighborsRemoved".into(),
+                        note: Some(format!("From `{}` Router", self.name_any())),
+                        action: "Updated".into(),
+                        secondary: None,
+                    },
+                    &router.object_ref(&()),
+                )
+                .await
+                .map_err(Error::KubeError)?;
         }
 
         // Publish event
