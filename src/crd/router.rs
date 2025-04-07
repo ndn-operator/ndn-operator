@@ -15,6 +15,7 @@ pub static ROUTER_MANAGER_NAME: &str = "router-controller";
 pub static UDP_UNICAST_PORT: i32 = 6363;
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 #[kube(group = "named-data.net", version = "v1alpha1", kind = "Router", namespaced)]
 #[kube(status = "RouterStatus")]
 pub struct RouterSpec {
@@ -23,8 +24,9 @@ pub struct RouterSpec {
     pub faces: RouterFaces,
 }
 
-#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[skip_serializing_none]
+#[serde(rename_all = "camelCase")]
 pub struct RouterFaces {
     udp4: Option<String>,
     tcp4: Option<String>,
@@ -52,6 +54,7 @@ impl RouterFaces {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct RouterStatus {
     pub online: bool,
     pub neighbors: BTreeSet<String>,

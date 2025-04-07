@@ -16,14 +16,17 @@ pub static NETWORK_FINALIZER: &str = "networks.named-data.net/finalizer";
 pub static NETWORK_MANAGER_NAME: &str = "network-controller";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 #[kube(group = "named-data.net", version = "v1alpha1", kind = "Network", namespaced, shortname = "ndn")]
 #[kube(status = "NetworkStatus")]
 pub struct NetworkSpec {
     pub prefix: String,
+    pub udp_unicast_port: i32,
     pub node_selector: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct NetworkStatus {
     ds_created: Option<bool>,
 }
