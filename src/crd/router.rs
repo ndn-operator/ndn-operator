@@ -67,35 +67,35 @@ impl Router {
         let my_network_name = self.labels().get(NETWORK_LABEL_KEY).ok_or(Error::OtherError("Network label not found".to_owned()))?;
         let lp = ListParams::default()
             .labels(&format!("{NETWORK_LABEL_KEY}={my_network_name}"));
-        api_router
+        for router in api_router
             .list(&lp)
             .await
             .map_err(Error::KubeError)?
             .iter()
             .filter(|router| router.name_any() != self.name_any())
-            .for_each(|router| {
-                debug!("Router {} faces: {:?}", router.name_any(), router.spec.faces);
-                let current_neighbors = match &router.status {
-                    Some(status) => status.neighbors.clone(),
-                    None => BTreeSet::new(),
-                };
-                // add self.faces to the neighbors
-                let mut new_neighbors = current_neighbors.clone();
-                let faces = self.spec.faces.to_btree_set();
-                for face in faces {
-                    new_neighbors.insert(face);
+        {
+            let current_neighbors = match &router.status {
+                Some(status) => status.neighbors.clone(),
+                None => BTreeSet::new(),
+            };
+            // add self.faces to the neighbors
+            let mut new_neighbors = current_neighbors.clone();
+            let faces = self.spec.faces.to_btree_set();
+            for face in faces {
+                new_neighbors.insert(face);
+            }
+            let status = json!({
+                "status": RouterStatus{
+                    online: true,
+                    neighbors: new_neighbors,
                 }
-                let status = json!({
-                    "status": RouterStatus{
-                        online: true,
-                        neighbors: new_neighbors,
-                    }
-                });
-                info!("Updating status of router {}...", router.name_any());
-                let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-                let _ = api_router.patch_status(&router.name_any(), &serverside, &Patch::Merge(&status))
-                    .map_err(Error::KubeError);
             });
+            info!("Updating status of router {}...", router.name_any());
+            debug!("Status: {:?}", status);
+            let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
+            let _ = api_router.patch_status(&router.name_any(), &serverside, &Patch::Merge(&status)).await
+                .map_err(Error::KubeError);
+        }
         // Publish event
         ctx.recorder
             .publish(
@@ -120,34 +120,35 @@ impl Router {
         let my_network_name = self.labels().get(NETWORK_LABEL_KEY).ok_or(Error::OtherError("Network label not found".to_owned()))?;
         let lp = ListParams::default()
             .labels(&format!("{NETWORK_LABEL_KEY}={my_network_name}"));
-        api_router
+        for router in api_router
             .list(&lp)
             .await
             .map_err(Error::KubeError)?
             .iter()
             .filter(|router| router.name_any() != self.name_any())
-            .for_each(|router| {
-                let current_neighbors = match &router.status {
-                    Some(status) => status.neighbors.clone(),
-                    None => BTreeSet::new(),
-                };
-                // remove self.faces from the neighbors
-                let mut new_neighbors = current_neighbors.clone();
-                let faces = self.spec.faces.to_btree_set();
-                for face in faces {
-                    new_neighbors.remove(&face);
+        {
+            let current_neighbors = match &router.status {
+                Some(status) => status.neighbors.clone(),
+                None => BTreeSet::new(),
+            };
+            // remove self.faces from the neighbors
+            let mut new_neighbors = current_neighbors.clone();
+            let faces = self.spec.faces.to_btree_set();
+            for face in faces {
+                new_neighbors.remove(&face);
+            }
+            let status = json!({
+                "status": RouterStatus{
+                    online: true,
+                    neighbors: new_neighbors,
                 }
-                let status = json!({
-                    "status": RouterStatus{
-                        online: false,
-                        neighbors: new_neighbors,
-                    }
-                });
-                info!("Updating status of router {}...", router.name_any());
-                let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-                let _ = api_router.patch_status(&router.name_any(), &serverside, &Patch::Merge(&status))
-                    .map_err(Error::KubeError);
             });
+            info!("Updating status of router {}...", router.name_any());
+            debug!("Status: {:?}", status);
+            let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
+            let _ = api_router.patch_status(&router.name_any(), &serverside, &Patch::Merge(&status)).await
+                .map_err(Error::KubeError);
+        }
 
         // Publish event
         ctx.recorder
