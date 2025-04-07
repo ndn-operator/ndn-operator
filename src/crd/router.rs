@@ -1,6 +1,5 @@
 use std::{collections::{BTreeMap,BTreeSet}, sync::Arc};
 
-use futures::TryFutureExt;
 use kube::{api::{ListParams, ObjectMeta, Patch, PatchParams}, runtime::{controller::Action, events::{Event, EventType}}, Api, CustomResource, Resource, ResourceExt};
 use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
