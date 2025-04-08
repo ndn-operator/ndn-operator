@@ -3,8 +3,8 @@
 # Declare variables to be passed into your templates.
 
 image:
-  repository: ghcr.io/gitopolis/ndn-operator
-  tag: latest
+  repository: ghcr.io/ndn-operator/ndn-operator
+  tag: "0.1.0"
   pullPolicy: IfNotPresent
 
 logLevel: debug

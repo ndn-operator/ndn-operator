@@ -4,7 +4,3 @@ description: A Helm chart for NDN Operator
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
-# dependencies:
-#   - name: ndn-operator-crd
-#     version: 0.1.0
-#     repository: https://gitopolis.github.io/helm-charts/ndn-operator-crd
