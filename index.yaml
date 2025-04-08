@@ -9,7 +9,7 @@ entries:
     name: ndn-operator
     type: application
     urls:
-    - https://github.com/Gitopolis/ndn-operator/releases/download/ndn-operator-0.1.0/ndn-operator-0.1.0.tgz
+    - https://github.com/ndn-operator/ndn-operator/releases/download/ndn-operator-0.1.0/ndn-operator-0.1.0.tgz
     version: 0.1.0
   ndn-operator-crd:
   - apiVersion: v2
@@ -20,6 +20,6 @@ entries:
     name: ndn-operator-crd
     type: application
     urls:
-    - https://github.com/Gitopolis/ndn-operator/releases/download/ndn-operator-crd-0.1.0/ndn-operator-crd-0.1.0.tgz
+    - https://github.com/ndn-operator/ndn-operator/releases/download/ndn-operator-crd-0.1.0/ndn-operator-crd-0.1.0.tgz
     version: 0.1.0
 generated: "2025-03-16T22:59:52.293523939Z"
