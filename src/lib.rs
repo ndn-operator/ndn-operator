@@ -24,7 +24,6 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 mod controller;
 mod ndnd;
-pub mod daemonset;
 pub mod crd;
 pub mod helper;
 pub use crate::controller::*;

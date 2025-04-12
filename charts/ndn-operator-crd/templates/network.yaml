@@ -9,7 +9,7 @@ spec:
     kind: Network
     plural: networks
     shortNames:
-    - ndn
+    - nw
     singular: network
   scope: Namespaced
   versions:
@@ -22,8 +22,10 @@ spec:
           spec:
             properties:
               nodeSelector:
+                additionalProperties:
+                  type: string
                 nullable: true
-                type: string
+                type: object
               prefix:
                 type: string
               udpUnicastPort:

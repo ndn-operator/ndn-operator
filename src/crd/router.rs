@@ -15,11 +15,11 @@ pub static ROUTER_MANAGER_NAME: &str = "router-controller";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[kube(group = "named-data.net", version = "v1alpha1", kind = "Router", namespaced)]
+#[kube(group = "named-data.net", version = "v1alpha1", kind = "Router", namespaced, shortname = "rt")]
 #[kube(status = "RouterStatus")]
 pub struct RouterSpec {
-    prefix: String,
-    node: String,
+    pub prefix: String,
+    pub node_name: String,
     pub faces: RouterFaces,
 }
 
@@ -229,7 +229,7 @@ pub fn create_owned_router(source: &Network, name: String, node_name: String, ip
         },
         spec: RouterSpec {
             prefix: source.spec.prefix.clone(),
-            node: node_name,
+            node_name: node_name,
             faces: RouterFaces {
                 udp4: {
                     if let Some(ip4) = ip4 {

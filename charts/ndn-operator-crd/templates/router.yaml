@@ -8,7 +8,8 @@ spec:
     categories: []
     kind: Router
     plural: routers
-    shortNames: []
+    shortNames:
+    - rt
     singular: router
   scope: Namespaced
   versions:
@@ -35,13 +36,13 @@ spec:
                     nullable: true
                     type: string
                 type: object
-              node:
+              nodeName:
                 type: string
               prefix:
                 type: string
             required:
             - faces
-            - node
+            - nodeName
             - prefix
             type: object
           status:
