@@ -14,9 +14,6 @@ resources:
     memory: 128Mi
 
 inject:
-  tls:
-    caBundle: |
-
-    crtPEM: |
-
-    keyPEM: |
+  caBundle: ""
+  crtPEM: ""
+  keyPEM: ""

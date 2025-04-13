@@ -23,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
     let cert_path = env::var("NDN_INJECT_TLS_CERT_FILE").unwrap_or("tls.crt".to_string());
     let key_path = env::var("NDN_INJECT_TLS_KEY_FILE").unwrap_or("tls.key".to_string());
 
-    let routes = warp::path("")
+    let routes = warp::path::end()
         .and(warp::body::json())
         .and_then(mutate_handler)
         .with(warp::trace::request());
