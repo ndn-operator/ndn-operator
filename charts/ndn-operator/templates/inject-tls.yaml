@@ -28,8 +28,9 @@ webhooks:
         resources: ["pods"]
     objectSelector:
       matchExpressions:
-      - key: networks.named-data.net/name
-        operator: Exists
+      - key: named-data.net/inject
+        operator: In
+        values: ["true", "yes", "1", "enable", "enabled"]
     failurePolicy: Fail
     admissionReviewVersions: ["v1", "v1beta1"]
     sideEffects: None

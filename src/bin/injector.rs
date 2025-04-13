@@ -1,10 +1,10 @@
 use json_patch::jsonptr::PointerBuf;
 use k8s_openapi::api::core::v1::{EnvVar, HostPathVolumeSource, Pod, Volume, VolumeMount};
-use kube::{api::ListParams, core::{
+use kube::{core::{
     admission::{AdmissionRequest, AdmissionResponse, AdmissionReview, Operation},
     DynamicObject, ResourceExt,
 }, Client};
-use operator::crd::{Network, Router, NETWORK_LABEL_KEY};
+use operator::crd::Network;
 use std::{convert::Infallible, error::Error};
 use tracing::*;
 use std::env;
@@ -61,7 +61,7 @@ async fn mutate_handler(body: AdmissionReview<DynamicObject>) -> Result<impl Rep
                     };
                     res = match mutate(res.clone(), &pod, network_name, network_namespace).await {
                         Ok(res) => {
-                            info!("accepted: {:?} on Foo {}", req.operation, name);
+                            info!("accepted: {:?} on {}", req.operation, name);
                             res
                         }
                         Err(err) => {
@@ -82,41 +82,19 @@ async fn mutate(res: AdmissionResponse, pod: &Pod, network_name: &String, networ
 
     let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
 
-    // If network's router doesn't exist on the pod's node, we deny the request
-    let api_router = kube::Api::<Router>::namespaced(client.clone(), network_namespace);
-    let lp = ListParams::default()
-        .labels(&format!("{}={}", NETWORK_LABEL_KEY, network_name));
-    let routers = match api_router
-        .list(&lp)
-        .await {
-            Ok(routers) => routers,
-            Err(err) => {
-                error!("failed to list routers: {}", err);
-                return Ok(res.deny(format!("failed to list routers: {}", err)));
-            }
-        };
-    // One of the routers must have spec.node_name == pod.spec.node_name
-    let pod_node_name = &pod.spec.clone().unwrap_or_default().node_name.unwrap_or_default();
-    let router = match routers
-        .iter()
-        .find(|router| {
-                 &router.spec.node_name == pod_node_name
-        }) {
-            Some(router) => router,
-            None => {
-                let msg = format!("There are no routers on node {pod_node_name} for network {network_name} in namespace {network_namespace}");
-                warn!("{}", msg);
-                return Ok(res.deny(msg));
-            }
-        };
-
-    let network = match TryInto::<Network>::try_into(router.owner_references()[0].clone()) {
+    // If network doesn't exist, deny the request
+    let api_network = kube::Api::<Network>::namespaced(client.clone(), network_namespace);
+    let network = match api_network
+        .get(network_name)
+        .await
+    {
         Ok(network) => network,
         Err(err) => {
-            error!("failed to get parent network: {}", err);
-            return Ok(res.deny(format!("failed to get network: {}", err)));
+            error!("failed to get network {network_name} in {network_namespace}: {err}");
+            return Ok(res.deny(format!("failed to get network {network_name} in {network_namespace}: {err}")));
         }
     };
+
     // Mount ndnd socket to each container in the pod
     let containers_len = match pod.spec {
         Some(ref spec) => spec.containers.len(),
@@ -147,7 +125,11 @@ async fn mutate(res: AdmissionResponse, pod: &Pod, network_name: &String, networ
         }));
         patches.push(json_patch::PatchOperation::Add(json_patch::AddOperation {
             path: PointerBuf::from_tokens(["spec", "containers", &i.to_string(), "env", "-"]),
-            value: serde_json::json!(create_env_var()),
+            value: serde_json::json!(create_env_var_transport()),
+        }));
+        patches.push(json_patch::PatchOperation::Add(json_patch::AddOperation {
+            path: PointerBuf::from_tokens(["spec", "containers", &i.to_string(), "env", "-"]),
+            value: serde_json::json!(create_env_var_prefix(&network)),
         }));
     });
     Ok(res.with_patch(json_patch::Patch(patches))?)
@@ -176,10 +158,18 @@ fn create_volume_mount() -> VolumeMount {
     }
 }
 
-fn create_env_var() -> EnvVar {
+fn create_env_var_transport() -> EnvVar {
     EnvVar {
         name: "NDN_CLIENT_TRANSPORT".to_string(),
         value: Some(format!("unix://{}", MOUNT_PATH)),
+        ..EnvVar::default()
+    }
+}
+
+fn create_env_var_prefix(network: &Network) -> EnvVar {
+    EnvVar {
+        name: "NDN_PREFIX".to_string(),
+        value: Some(network.spec.prefix.to_string()),
         ..EnvVar::default()
     }
 }

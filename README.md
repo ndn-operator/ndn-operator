@@ -6,7 +6,7 @@
 ```
 helm repo add ndn-operator https://ndn-operator.github.io/ndn-operator
 helm install ndn-operator-crd ndn-operator/ndn-operator-crd
-helm install ndn-operator ndn-operator/ndn-operator --namespace ndn-operator --create-namespace
+helm install ndn-operator ndn-operator/ndn-operator --namespace ndn --create-namespace
 ```
 ## Create your first ndn network
 network.yaml:
@@ -21,6 +21,51 @@ spec:
 ```
 ```
 kubectl apply -f network.yaml
+```
+
+### Pingserver
+pod.yaml:
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pingserver
+  annotations:
+    networks.named-data.net/name: test
+  labels:
+    named-data.net/inject: "true"
+spec:
+  containers:
+  - name: server
+    image: ghcr.io/named-data/ndnd:latest
+    command: ["/ndnd", "pingserver"]
+    args: ["/test/pingserver"]
+```
+```
+kubectl apply -f pod.yaml
+```
+
+job.yaml:
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-ping
+spec:
+  template:
+    metadata:
+      annotations:
+        networks.named-data.net/name: test
+      labels:
+        named-data.net/inject: "true"
+    spec:
+      restartPolicy: Never
+      ttlSecondsAfterFinished: 600
+      containers:
+      - name: ping
+        image: ghcr.io/named-data/ndnd:latest
+        command: ["/ndnd", "ping"]
+        args: ["/test/pingserver", "--interval", "5000", "--count", "20"]
 ```
 
 ## Architecture

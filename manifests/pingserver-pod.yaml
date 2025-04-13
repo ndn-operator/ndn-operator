@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pingserver
+  annotations:
+    networks.named-data.net/name: test
+  labels:
+    named-data.net/inject: "true"
+spec:
+  containers:
+  - name: server
+    image: ghcr.io/named-data/ndnd:20250405
+    command: ["/ndnd", "pingserver"]
+    args: ["/test/pingserver"]
+    imagePullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
