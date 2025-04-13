@@ -1,13 +1,9 @@
-# Default values for ndn-operator.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-
 image:
   repository: ghcr.io/ndn-operator/ndn-operator
-  tag: "0.1.0"
+  tag: "0.2.0"
   pullPolicy: IfNotPresent
 
-logLevel: debug
+logLevel: info
 
 resources:
   limits:
@@ -16,3 +12,11 @@ resources:
   requests:
     cpu: 100m
     memory: 128Mi
+
+inject:
+  tls:
+    caBundle: |
+
+    crtPEM: |
+
+    keyPEM: |

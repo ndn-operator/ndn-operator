@@ -7,6 +7,7 @@ use kube::{api::ListParams, core::{
 use operator::crd::{Network, Router, NETWORK_LABEL_KEY};
 use std::{convert::Infallible, error::Error};
 use tracing::*;
+use std::env;
 use warp::{reply, Filter, Reply};
 
 
@@ -14,25 +15,27 @@ static ANNOTATION_NAME: &str = "networks.named-data.net/name";
 static ANNOTATION_NAMESPACE: &str = "networks.named-data.net/namespace";
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     
-    let routes = warp::path("mutate")
+    let listen_port = env::var("NDN_INJECT_PORT").unwrap_or("8443".to_string()).parse::<u16>()?;
+    let listen_ip = env::var("NDN_INJECT_IP").unwrap_or("0.0.0.0".to_string()).parse::<std::net::IpAddr>()?;
+    let cert_path = env::var("NDN_INJECT_TLS_CERT_FILE").unwrap_or("tls.crt".to_string());
+    let key_path = env::var("NDN_INJECT_TLS_KEY_FILE").unwrap_or("tls.key".to_string());
+
+    let routes = warp::path("")
         .and(warp::body::json())
         .and_then(mutate_handler)
         .with(warp::trace::request());
 
-    // You must generate a certificate for the service / url,
-    // encode the CA in the MutatingWebhookConfiguration, and terminate TLS here.
-    // See admission_setup.sh + admission_controller.yaml.tpl for how to do this.
-    let addr = format!("{}:8443", std::env::var("ADMISSION_PRIVATE_IP").unwrap());
+
     warp::serve(warp::post().and(routes))
         .tls()
-        .cert_path("admission-controller-tls.crt")
-        .key_path("admission-controller-tls.key")
-        //.run(([0, 0, 0, 0], 8443)) // in-cluster
-        .run(addr.parse::<std::net::SocketAddr>().unwrap()) // local-dev
+        .cert_path(cert_path)
+        .key_path(key_path)
+        .run((listen_ip, listen_port))
         .await;
+    Ok(())
 }
 
 async fn mutate_handler(body: AdmissionReview<DynamicObject>) -> Result<impl Reply, Infallible> {

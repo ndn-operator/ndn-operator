@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ndn-inject
+  namespace: {{ .Release.Namespace }}
+  labels:
+    named-data.net/component: ndn-inject
+    named-data.net/instance: {{ .Release.Name }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      named-data.net/component: ndn-inject
+      named-data.net/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        named-data.net/component: ndn-inject
+        named-data.net/instance: {{ .Release.Name }}
+        chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      serviceAccountName: ndn-controller
+      volumes:
+      - name: ndn-inject-tls
+        secret:
+          secretName: ndn-inject-tls
+      containers:
+      - name: ndn-inject
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+        command: ["/injector"]
+        volumeMounts:
+        - name: ndn-inject-tls
+          mountPath: /etc/ndn/injector
+          readOnly: true
+        env:
+        - name: RUST_LOG
+          value: "{{ .Values.logLevel }}"
+        - name: NDN_INJECT_TLS_CERT_FILE
+          value: /etc/ndn/injector/tls.crt
+        - name: NDN_INJECT_TLS_KEY_FILE
+          value: /etc/ndn/injector/tls.key
+        - name: NDN_INJECT_PORT
+          value: "8443"
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        resources:
+          limits:
+            cpu: "{{ .Values.resources.limits.cpu }}"
+            memory: "{{ .Values.resources.limits.memory }}"
+          requests:
+            cpu: "{{ .Values.resources.requests.cpu }}"
+            memory: "{{ .Values.resources.requests.memory }}"

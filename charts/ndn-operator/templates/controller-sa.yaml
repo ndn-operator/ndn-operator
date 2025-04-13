@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ndn-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    named-data.net/component: ndn-controller
+    named-data.net/instance: {{ .Release.Name }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"

@@ -1,0 +1,21 @@
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: ndn-inject
+webhooks:
+  - name: ndn-inject.named-data.net
+    clientConfig:
+      caBundle: {{ ternary (b64enc (trim $ca.Cert)) (b64enc (trim .Values.injector.tls.caBundle)) (empty .Values.injector.tls.caBundle) }}
+      service:
+       name: ndn-inject
+       namespace: {{ .Release.Namespace }}
+       path: "/"
+    rules:
+      - operations: ["CREATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+    failurePolicy: Fail
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    timeoutSeconds: 5

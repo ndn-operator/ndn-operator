@@ -1,25 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ndn-operator
+  name: ndn-controller
   namespace: {{ .Release.Namespace }}
   labels:
-    app: ndn-operator
+    named-data.net/component: ndn-controller
+    named-data.net/instance: {{ .Release.Name }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ndn-operator
+      named-data.net/component: ndn-controller
+      named-data.net/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: ndn-operator
+        named-data.net/component: ndn-controller
+        named-data.net/instance: {{ .Release.Name }}
         chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
-      serviceAccountName: ndn-operator
+      serviceAccountName: ndn-controller
       containers:
-        - name: ndn-operator
+        - name: ndn-controller
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           env:
