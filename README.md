@@ -52,6 +52,7 @@ kind: Job
 metadata:
   name: test-ping
 spec:
+  ttlSecondsAfterFinished: 600
   template:
     metadata:
       annotations:
@@ -60,7 +61,6 @@ spec:
         named-data.net/inject: "true"
     spec:
       restartPolicy: Never
-      ttlSecondsAfterFinished: 600
       containers:
       - name: ping
         image: ghcr.io/named-data/ndnd:latest
