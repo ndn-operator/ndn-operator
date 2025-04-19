@@ -4,7 +4,7 @@ use kube::{core::{
     admission::{AdmissionRequest, AdmissionResponse, AdmissionReview, Operation},
     DynamicObject, ResourceExt,
 }, Client};
-use operator::crd::Network;
+use operator::controller::Network;
 use std::{convert::Infallible, error::Error};
 use tracing::*;
 use std::env;

@@ -6,10 +6,9 @@ use schemars::JsonSchema;
 use serde_json::json;
 use serde_with::skip_serializing_none;
 use tracing::*;
-use super::Network;
-use crate::{Context, Error, Result};
+use super::{Context, Network, NETWORK_LABEL_KEY};
+use crate::{Error, Result};
 
-pub static NETWORK_LABEL_KEY: &str = "network.named-data.net/name";
 pub static ROUTER_FINALIZER: &str = "routers.named-data.net/finalizer";
 pub static ROUTER_MANAGER_NAME: &str = "router-controller";
 

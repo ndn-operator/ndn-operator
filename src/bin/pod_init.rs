@@ -2,7 +2,7 @@
 use operator::{
   Result,
   Error,
-  crd::{create_owned_router, Network, Router, ROUTER_MANAGER_NAME},
+  controller::{create_owned_router, Network, Router, ROUTER_MANAGER_NAME},
   telemetry, NdndConfig,
   fw::{ForwarderConfig, FacesConfig, UdpConfig, UnixConfig},
   dv::RouterConfig,

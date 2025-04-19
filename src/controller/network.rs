@@ -1,4 +1,5 @@
-use crate::{helper::*, Context, Error, Result};
+use super::{get_my_pod, Context};
+use crate::{Error, Result};
 use k8s_openapi::{
     api::{
         apps::v1::{DaemonSet, DaemonSetSpec},
@@ -24,6 +25,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 pub static NETWORK_FINALIZER: &str = "networks.named-data.net/finalizer";
 pub static NETWORK_MANAGER_NAME: &str = "network-controller";
+pub static NETWORK_LABEL_KEY: &str = "network.named-data.net/name";
 pub static CONTAINER_CONFIG_DIR: &str = "/etc/ndnd";
 pub static CONTAINER_SOCKET_DIR: &str = "/run/ndnd";
 pub static HOST_CONFIG_DIR: &str = "/etc/ndnd";
@@ -130,7 +132,7 @@ impl Network {
     pub fn create_owned_daemonset(&self, image: Option<String>, service_account: Option<String>) -> DaemonSet {
         let oref = self.controller_owner_ref(&()).unwrap();
         let mut labels = BTreeMap::new();
-        labels.insert("network".to_string(), self.name_any());
+        labels.insert(NETWORK_LABEL_KEY.to_string(), self.name_any());
         let container_config_path = self.container_config_path();
         let container_socket_path = self.container_socket_path();
         DaemonSet {

@@ -1,5 +1,5 @@
 use actix_web::{get, middleware, web::Data, App, HttpRequest, HttpResponse, HttpServer, Responder};
-pub use operator::{self, telemetry, State};
+pub use operator::{self, telemetry, controller::{State, run_nw, run_router}};
 
 #[get("/health")]
 async fn health(_: HttpRequest) -> impl Responder {
@@ -18,8 +18,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Initiatilize Kubernetes controller state
     let state = State::default();
-    let nw_ctrl = operator::run_nw(state.clone());
-    let rt_ctrl = operator::run_router(state.clone());
+    let nw_ctrl = run_nw(state.clone());
+    let rt_ctrl = run_router(state.clone());
     let server =  HttpServer::new(move || {
         App::new()
             .app_data(Data::new(state.clone()))
