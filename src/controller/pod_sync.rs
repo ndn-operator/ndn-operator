@@ -44,16 +44,13 @@ pub async fn pod_apply(pod: Arc<Pod>, ctx: Context) -> Result<Action> {
       .await
       .map_err(Error::KubeError)?;
 
-    // Add status.created to the router
+    // Add status to the router
     let patch_status = json!({
-        "status": RouterStatus {
-            created: Some(true),
-            ..RouterStatus::default()
-        }
+        "status": RouterStatus::default()
     });
     debug!("Patch status: {:?}", patch_status);
     let _ = api_rt
-      .patch_status(&router_name, &pp, &Patch::Strategic(patch_status))
+      .patch_status(&router_name, &pp, &Patch::Merge(patch_status))
       .await
       .map_err(Error::KubeError)?;
 

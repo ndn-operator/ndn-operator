@@ -32,11 +32,8 @@ spec:
           status:
             nullable: true
             properties:
-              created:
-                nullable: true
-                type: boolean
               faces:
-                nullable: true
+                default: {}
                 properties:
                   tcp4:
                     nullable: true
@@ -52,15 +49,15 @@ spec:
                     type: string
                 type: object
               initialized:
-                nullable: true
+                default: false
                 type: boolean
               neighbors:
+                default: []
                 items:
                   type: string
-                nullable: true
                 type: array
               online:
-                nullable: true
+                default: false
                 type: boolean
             type: object
         required:

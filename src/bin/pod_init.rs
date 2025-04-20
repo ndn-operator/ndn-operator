@@ -6,7 +6,7 @@ use kube::{
 };
 use operator::{
   controller::{
-    is_router_created, Router, RouterFaces, RouterStatus, ROUTER_MANAGER_NAME,
+    is_router_created, Router, RouterFaces, PatchRouterStatus,
   },
   dv::RouterConfig,
   fw::{FacesConfig, ForwarderConfig, UdpConfig, UnixConfig},
@@ -113,10 +113,10 @@ async fn main() -> anyhow::Result<()> {
     tcp6: None,
   };
   let patch_status = json!({
-    "status": RouterStatus {
+    "status": PatchRouterStatus {
       faces: Some(faces),
       initialized: Some(true),
-      ..RouterStatus::default()
+      ..PatchRouterStatus::default()
     }
   });
   debug!("Patch status: {:?}", patch_status);

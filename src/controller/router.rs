@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet}, sync::Arc
 };
 
+// use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 use kube::{
     api::{ListParams, ObjectMeta, Patch, PatchParams},
     core::Expression,
@@ -23,9 +24,9 @@ use crate::{Error, Result};
 pub static ROUTER_FINALIZER: &str = "router.named-data.net/finalizer";
 pub static ROUTER_MANAGER_NAME: &str = "router-controller";
 
-#[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[kube(group = "named-data.net", version = "v1alpha1", kind = "Router", namespaced, shortname = "rt")]
+#[kube(group = "named-data.net", version = "v1alpha1", kind = "Router", derive="Default", namespaced, shortname = "rt")]
 #[kube(status = "RouterStatus")]
 pub struct RouterSpec {
     pub prefix: String,
@@ -33,30 +34,28 @@ pub struct RouterSpec {
 }
 
 #[skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub struct RouterStatus {
-    pub created: Option<bool>,
+    pub initialized: bool,
+    pub online: bool,
+    pub faces: RouterFaces,
+    pub neighbors: BTreeSet<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchRouterStatus {
     pub initialized: Option<bool>,
     pub online: Option<bool>,
     pub faces: Option<RouterFaces>,
     pub neighbors: Option<BTreeSet<String>>,
 }
 
-impl Default for RouterStatus {
-    fn default() -> Self {
-        RouterStatus {
-            created: None,
-            initialized: None,
-            online: None,
-            faces: None,
-            neighbors: None,
-        }
-    }
-}
-
 #[skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RouterFaces {
     pub udp4: Option<String>,
@@ -65,16 +64,6 @@ pub struct RouterFaces {
     pub tcp6: Option<String>,
 }
 
-impl Default for RouterFaces {
-    fn default() -> Self {
-        RouterFaces {
-            udp4: None,
-            tcp4: None,
-            udp6: None,
-            tcp6: None,
-        }
-    }
-}
 
 impl RouterFaces {
 
@@ -102,7 +91,7 @@ impl Router {
         debug!("Reconciling router: {:?}", self);
         let my_status = self.status.clone().unwrap_or_default();
         // Proceed only if status.online is true
-        match &my_status.online.unwrap_or_default() {
+        match &my_status.online{
             true => {
                 debug!("Router {} is online, proceeding with reconciliation", self.name_any());
             }
@@ -115,7 +104,7 @@ impl Router {
         // Update status.neighbors of all other routers in the network
         let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let my_network_name = self.labels().get(NETWORK_LABEL_KEY).ok_or(Error::OtherError("Network label not found".to_owned()))?;
-        let my_faces = my_status.faces.unwrap_or_default().to_btree_set();
+        let my_faces = my_status.faces.to_btree_set();
         let lp = ListParams::default()
             .labels_from(&Expression::Equal(NETWORK_LABEL_KEY.into(), my_network_name.into()).into());
 
@@ -129,7 +118,7 @@ impl Router {
         {
             // Adding self to the set of neighbors
             let router_neighbors = match &router.status {
-                Some(status) => status.neighbors.clone().unwrap_or_default().clone(),
+                Some(status) => status.neighbors.clone(),
                 None => BTreeSet::new(),
             };
             // add self.faces to the neighbors
@@ -139,8 +128,7 @@ impl Router {
             }
             // Patch only neighbors field
             let patch_status = json!({
-                "status": RouterStatus{
-                    created: None,
+                "status": PatchRouterStatus{
                     initialized: None,
                     online: None,
                     faces: None,
@@ -192,7 +180,7 @@ impl Router {
         let lp = ListParams::default()
             .labels(&format!("{NETWORK_LABEL_KEY}={my_network_name}"));
         let my_status = self.status.clone().unwrap_or_default();
-        let my_faces = my_status.faces.unwrap_or_default().to_btree_set();
+        let my_faces = my_status.faces.to_btree_set();
         for router in api_router
             .list(&lp)
             .await
@@ -201,7 +189,7 @@ impl Router {
             .filter(|router| router.name_any() != self.name_any())
         {
             let current_neighbors = match &router.status {
-                Some(status) => status.neighbors.clone().unwrap_or_default().clone(),
+                Some(status) => status.neighbors.clone(),
                 None => BTreeSet::new(),
             };
             // remove self.faces from the neighbors
@@ -211,8 +199,7 @@ impl Router {
             }
             // Patch only neighbors field
             let patch_status = json!({
-                "status": RouterStatus{
-                    created: None,
+                "status": PatchRouterStatus{
                     initialized: None,
                     online: None,
                     faces: None,
@@ -283,11 +270,7 @@ pub fn create_owned_router(source: &Network, name: &String, node_name: &String) 
 pub fn is_router_created() -> impl Condition<Router> {
     |obj: Option<&Router>| {
         if let Some(router) = &obj {
-            if let Some(status) = &router.status {
-                if let Some(created) = &status.created {
-                    return created == &true;
-                }
-            }
+            return router.status.is_some()
         }
         false
     }
@@ -297,9 +280,7 @@ pub fn is_router_online() -> impl Condition<Router> {
     |obj: Option<&Router>| {
         if let Some(router) = &obj {
             if let Some(status) = &router.status {
-                if let Some(online) = &status.online {
-                    return online == &true;
-                }
+                return status.online
             }
         }
         false
@@ -310,9 +291,7 @@ pub fn is_router_initialized() -> impl Condition<Router> {
     |obj: Option<&Router>| {
         if let Some(router) = &obj {
             if let Some(status) = &router.status {
-                if let Some(initialized) = &status.initialized {
-                    return initialized == &true;
-                }
+                return status.initialized
             }
         }
         false

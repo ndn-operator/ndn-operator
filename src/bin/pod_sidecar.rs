@@ -1,5 +1,5 @@
 use operator::{
-    controller::{Router, RouterStatus, ROUTER_MANAGER_NAME}, telemetry, Error
+    controller::{Router, PatchRouterStatus, ROUTER_MANAGER_NAME}, telemetry, Error
 };
 use futures::{TryStreamExt, pin_mut};
 use kube::{api::{Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client};
@@ -18,9 +18,9 @@ async fn main() -> anyhow::Result<()> {
     // Set my status.online to true
     info!("Set my router status to online");
     let patch_status = json!({
-        "status": RouterStatus{
+        "status": PatchRouterStatus{
             online: Some(true),
-            ..RouterStatus::default()
+            ..PatchRouterStatus::default()
         }
     });
     debug!("Patch status: {:?}", patch_status);
@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
     pin_mut!(watcher);
     while let Some(router) = watcher.try_next().await? {
         let new_neighbors = match router.status {
-            Some(ref status) => status.neighbors.clone().unwrap_or_default(),
+            Some(ref status) => status.neighbors.clone(),
             None => BTreeSet::<String>::new(),
         };
         let added_neighbors: BTreeSet<String> = new_neighbors.difference(&neighbors).cloned().collect();
