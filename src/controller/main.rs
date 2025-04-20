@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
-use super::{Network, Router, NETWORK_FINALIZER, ROUTER_FINALIZER, DS_LABEL_KEY, pod_apply, pod_cleanup};
+use super::{pod_apply, pod_cleanup, Network, Router, DS_LABEL_KEY, NETWORK_FINALIZER, ROUTER_FINALIZER};
 use crate::{controller::POD_FINALIZER, Error, Result};
 
 
