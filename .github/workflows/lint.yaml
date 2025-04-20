@@ -1,0 +1,35 @@
+name: Lint
+on:
+  pull_request:
+    branches:
+    - main
+    paths-ignore:
+    - README.md
+    - docs/**
+
+env:
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  clippy_check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features
+  crd_check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate CRDs
+        run: |
+          cargo run --package ndn-operator --bin gencrd -- --output ./charts/ndn-operator-crd/templates
+      - name: Check CRDs
+        run: |
+          # Check if there are any changes in the CRD files
+          git diff --exit-code ./charts/ndn-operator-crd/templates
+          # If there are changes, fail the job
+          if [ $? -ne 0 ]; then
+            echo "CRD files have changed. Please update the charts/ndn-operator-crd/templates directory."
+            exit 1
+          fi
