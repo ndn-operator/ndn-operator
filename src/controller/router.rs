@@ -14,8 +14,8 @@ use kube::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use serde_with::skip_serializing_none;
+use json_patch::{jsonptr::PointerBuf, Patch as JsonPatch, PatchOperation, ReplaceOperation};
 use tracing::*;
 
 use super::{Context, Network, NETWORK_LABEL_KEY};
@@ -42,16 +42,6 @@ pub struct RouterStatus {
     pub online: bool,
     pub faces: RouterFaces,
     pub neighbors: BTreeSet<String>,
-}
-
-#[skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PatchRouterStatus {
-    pub initialized: Option<bool>,
-    pub online: Option<bool>,
-    pub faces: Option<RouterFaces>,
-    pub neighbors: Option<BTreeSet<String>>,
 }
 
 #[skip_serializing_none]
@@ -121,25 +111,28 @@ impl Router {
                 Some(status) => status.neighbors.clone(),
                 None => BTreeSet::new(),
             };
+
             // add self.faces to the neighbors
             let mut new_neighbors = router_neighbors.clone();
             for face in &my_faces {
                 new_neighbors.insert(face.to_string());
             }
-            // Patch only neighbors field
-            let patch_status = json!({
-                "status": PatchRouterStatus{
-                    initialized: None,
-                    online: None,
-                    faces: None,
-                    neighbors: Some(new_neighbors),
-                }
-            });
+            debug!("Router {} neighbors: {:?}", router.name_any(), new_neighbors);
+            let patches = vec![
+                PatchOperation::Replace(
+                    ReplaceOperation
+                        {
+                            path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
+                            value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
+                        }
+                )
+            ];
+            let patch = Patch::Json::<()>(JsonPatch(patches));
             info!("Updating neigbors of router {}...", router.name_any());
-            debug!("Status patch: {:?}", patch_status);
+            debug!("Status patch: {:?}", patch);
             let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-            let _ = api_router.patch_status(&router.name_any(), &serverside, &Patch::Strategic(&patch_status)).await
-                .map_err(Error::KubeError);
+            let _ = api_router.patch_status(&router.name_any(), &serverside, &patch).await
+                .map_err(Error::KubeError)?;
 
             ctx.recorder
                 .publish(
@@ -197,19 +190,21 @@ impl Router {
             for face in &my_faces {
                 new_neighbors.remove(&face.to_string());
             }
-            // Patch only neighbors field
-            let patch_status = json!({
-                "status": PatchRouterStatus{
-                    initialized: None,
-                    online: None,
-                    faces: None,
-                    neighbors: Some(new_neighbors),
-                }
-            });
-            info!("Updating status of router {}...", router.name_any());
-            debug!("Status: {:?}", patch_status);
+            debug!("Router {} neighbors: {:?}", router.name_any(), new_neighbors);
+            let patches = vec![
+                PatchOperation::Replace(
+                    ReplaceOperation
+                        {
+                            path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
+                            value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
+                        }
+                )
+            ];
+            let patch = Patch::Json::<()>(JsonPatch(patches));
+            info!("Updating neigbors of router {}...", router.name_any());
+            debug!("Status patch: {:?}", patch);
             let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-            let _ = api_router.patch_status(&router.name_any(), &serverside, &Patch::Strategic(&patch_status)).await
+            let _ = api_router.patch_status(&router.name_any(), &serverside, &patch).await
                 .map_err(Error::KubeError)?;
             ctx.recorder
                 .publish(
@@ -269,10 +264,7 @@ pub fn create_owned_router(source: &Network, name: &String, node_name: &String) 
 
 pub fn is_router_created() -> impl Condition<Router> {
     |obj: Option<&Router>| {
-        if let Some(router) = &obj {
-            return router.status.is_some()
-        }
-        false
+        return obj.is_some();
     }
 }
 

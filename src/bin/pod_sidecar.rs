@@ -1,9 +1,9 @@
 use operator::{
-    controller::{Router, PatchRouterStatus, ROUTER_MANAGER_NAME}, telemetry, Error
+    controller::{Router, ROUTER_MANAGER_NAME}, telemetry, Error
 };
 use futures::{TryStreamExt, pin_mut};
 use kube::{api::{Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client};
-use serde_json::json;
+use json_patch::{jsonptr::PointerBuf, Patch as JsonPatch, PatchOperation, ReplaceOperation};
 use std::{collections::BTreeSet, env};
 use std::process::Command;
 use tracing::*;
@@ -17,15 +17,19 @@ async fn main() -> anyhow::Result<()> {
     let api_router = Api::<Router>::namespaced(client, &network_namespace);
     // Set my status.online to true
     info!("Set my router status to online");
-    let patch_status = json!({
-        "status": PatchRouterStatus{
-            online: Some(true),
-            ..PatchRouterStatus::default()
-        }
-    });
-    debug!("Patch status: {:?}", patch_status);
+    let patches = vec![
+        PatchOperation::Replace(
+            ReplaceOperation
+                {
+                    path: PointerBuf::from_tokens(vec!["status", "online"]),
+                    value: serde_json::to_value(true).unwrap(),
+                }
+        )
+    ];
+    let patch = Patch::Json::<()>(JsonPatch(patches));
+    debug!("Patch status: {:?}", patch);
     let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-    let patched = api_router.patch_status(&my_router_name, &serverside, &Patch::Strategic(&patch_status)).await
+    let patched = api_router.patch_status(&my_router_name, &serverside, &patch).await
         .map_err(Error::KubeError)?;
     info!("Patched router status: {:?}", patched.status);
     // Watch the neighbors in my_router's status and run `/ndnd dv link-create <URL>` or `/ndnd dv link-destroy <URL>` when it changes
