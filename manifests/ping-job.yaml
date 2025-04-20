@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-ping
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      annotations:
+        networks.named-data.net/name: test
+        networks.named-data.net/namespace: ndn
+      labels:
+        named-data.net/inject: "true"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: ping
+        image: ghcr.io/named-data/ndnd:20250405
+        command: ["/ndnd", "ping"]
+        args: ["/test/pingserver", "--interval", "5000", "--count", "20"]
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi

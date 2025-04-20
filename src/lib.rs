@@ -16,18 +16,20 @@ pub enum Error {
     // so boxing this error to break cycles
     FinalizerError(#[source] Box<kube::runtime::finalizer::Error<Error>>),
 
+    #[error("Missing Label: {0}")]
+    MissingLabel(String),
+    
+    #[error("Missing Annotation: {0}")]
+    MissingAnnotation(String),
+
     /// NB: this is a catch-all for any other errors
     #[error("Other Error: {0}")]
     OtherError(String),
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-mod controller;
 mod ndnd;
-pub mod daemonset;
-pub mod crd;
-pub mod helper;
-pub use crate::controller::*;
+pub mod controller;
 pub use crate::ndnd::*;
 
 /// Log and trace integrations

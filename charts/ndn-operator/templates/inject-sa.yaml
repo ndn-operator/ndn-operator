@@ -1,10 +1,9 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: ndn-operator
+  name: ndn-inject
   namespace: {{ .Release.Namespace }}
   labels:
-    app: ndn-operator
+    named-data.net/component: ndn-inject
+    named-data.net/instance: {{ .Release.Name }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"

@@ -1,9 +1,9 @@
 use operator::{
-    crd::{Router, RouterStatus, ROUTER_MANAGER_NAME}, telemetry, Error
+    controller::{Router, ROUTER_MANAGER_NAME}, telemetry, Error
 };
 use futures::{TryStreamExt, pin_mut};
-use kube::{api::{Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client, ResourceExt};
-use serde_json::json;
+use kube::{api::{Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client};
+use json_patch::{jsonptr::PointerBuf, Patch as JsonPatch, PatchOperation, ReplaceOperation};
 use std::{collections::BTreeSet, env};
 use std::process::Command;
 use tracing::*;
@@ -15,25 +15,22 @@ async fn main() -> anyhow::Result<()> {
     let my_router_name = env::var("NDN_ROUTER_NAME")?;
     let client = Client::try_default().await?; 
     let api_router = Api::<Router>::namespaced(client, &network_namespace);
-    // Set my_router.status.online to true
-    let my_router = api_router.get(&my_router_name).await?;
-    let current_status = match my_router.status {
-        Some(ref status) => status.clone(),
-        None => RouterStatus {
-            online: false,
-            neighbors: BTreeSet::new(),
-        },
-    };
-    let status = json!({
-        "status": RouterStatus{
-            online: true,
-            neighbors: current_status.neighbors,
-        }
-    });
-    let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-    let _ = api_router.patch_status(&my_router.name_any(), &serverside, &Patch::Merge(&status)).await
-        .map_err(Error::KubeError);
+    // Set my status.online to true
     info!("Set my router status to online");
+    let patches = vec![
+        PatchOperation::Replace(
+            ReplaceOperation{
+                path: PointerBuf::from_tokens(vec!["status", "online"]),
+                value: serde_json::to_value(true).unwrap(),
+            }
+        )
+    ];
+    let patch = Patch::Json::<()>(JsonPatch(patches));
+    debug!("Patch status: {:?}", patch);
+    let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
+    let patched = api_router.patch_status(&my_router_name, &serverside, &patch).await
+        .map_err(Error::KubeError)?;
+    info!("Patched router status: {:?}", patched.status);
     // Watch the neighbors in my_router's status and run `/ndnd dv link-create <URL>` or `/ndnd dv link-destroy <URL>` when it changes
     let wc = watcher::Config::default()
         .fields(format!("metadata.name={}", my_router_name).as_str());
