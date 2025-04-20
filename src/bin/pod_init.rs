@@ -83,6 +83,7 @@ async fn main() -> anyhow::Result<()> {
   info!("{}", config_str);
 
   // Wait for the router to be created
+  info!("Waiting for the router {}...", router_name);
   let client = Client::try_default().await?;
   let api_rt = Api::<Router>::namespaced(client.clone(), &network_namespace);
   let created = await_condition(

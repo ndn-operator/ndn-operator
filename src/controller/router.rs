@@ -278,8 +278,9 @@ pub fn create_owned_router(source: &Network, name: &String, node_name: &String) 
 
 pub fn is_router_created() -> impl Condition<Router> {
     |obj: Option<&Router>| {
-        if let Some(_) = &obj {
-            true;
+        if let Some(router) = &obj {
+            debug!("Router created: {:?}", router);
+            return true;
         }
         false
     }

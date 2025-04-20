@@ -18,7 +18,7 @@ use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
 use super::{Network, Router, NETWORK_FINALIZER, ROUTER_FINALIZER, DS_LABEL_KEY, pod_apply, pod_cleanup};
-use crate::{Error, Result};
+use crate::{controller::POD_FINALIZER, Error, Result};
 
 
 // Context for our reconciler
@@ -66,7 +66,7 @@ async fn reconcile_pod(pod: Arc<Pod>, ctx: Arc<Context>) -> Result<Action> {
     let ns = pod.namespace().unwrap();
     let api_pod: Api<Pod> = Api::namespaced(ctx.client.clone(), &ns);
     info!("Reconciling Pod \"{}\" in {}", pod.name_any(), ns);
-    finalizer(&api_pod, DS_LABEL_KEY, pod, async |event| {
+    finalizer(&api_pod, POD_FINALIZER, pod, async |event| {
         match event {
             Finalizer::Apply(pod) => pod_apply(pod, (*ctx).clone()).await,
             Finalizer::Cleanup(pod) => pod_cleanup(pod, (*ctx).clone()).await,
