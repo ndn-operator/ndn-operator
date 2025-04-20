@@ -21,7 +21,19 @@ spec:
         properties:
           spec:
             properties:
+              nodeName:
+                type: string
+              prefix:
+                type: string
+            required:
+            - nodeName
+            - prefix
+            type: object
+          status:
+            nullable: true
+            properties:
               faces:
+                nullable: true
                 properties:
                   tcp4:
                     nullable: true
@@ -36,27 +48,17 @@ spec:
                     nullable: true
                     type: string
                 type: object
-              nodeName:
-                type: string
-              prefix:
-                type: string
-            required:
-            - faces
-            - nodeName
-            - prefix
-            type: object
-          status:
-            nullable: true
-            properties:
+              initialized:
+                nullable: true
+                type: boolean
               neighbors:
                 items:
                   type: string
+                nullable: true
                 type: array
               online:
+                nullable: true
                 type: boolean
-            required:
-            - neighbors
-            - online
             type: object
         required:
         - spec

@@ -23,9 +23,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{collections::BTreeMap, sync::Arc};
 
-pub static NETWORK_FINALIZER: &str = "networks.named-data.net/finalizer";
+pub static NETWORK_FINALIZER: &str = "network.named-data.net/finalizer";
 pub static NETWORK_MANAGER_NAME: &str = "network-controller";
 pub static NETWORK_LABEL_KEY: &str = "network.named-data.net/name";
+pub static DS_LABEL_KEY : &str = "network.named-data.net/managed-by";
 pub static CONTAINER_CONFIG_DIR: &str = "/etc/ndnd";
 pub static CONTAINER_SOCKET_DIR: &str = "/run/ndnd";
 pub static HOST_CONFIG_DIR: &str = "/etc/ndnd";
@@ -132,7 +133,7 @@ impl Network {
     pub fn create_owned_daemonset(&self, image: Option<String>, service_account: Option<String>) -> DaemonSet {
         let oref = self.controller_owner_ref(&()).unwrap();
         let mut labels = BTreeMap::new();
-        labels.insert(NETWORK_LABEL_KEY.to_string(), self.name_any());
+        labels.insert(DS_LABEL_KEY.to_string(), self.name_any());
         let container_config_path = self.container_config_path();
         let container_socket_path = self.container_socket_path();
         DaemonSet {
@@ -184,10 +185,11 @@ impl Network {
                                     ..EnvVar::default()
                                 },
                                 EnvVar {
+                                    // Router name is equal to the pod name
                                     name: "NDN_ROUTER_NAME".to_string(),
                                     value_from: Some(EnvVarSource {
                                         field_ref: Some(ObjectFieldSelector {
-                                            field_path: "spec.nodeName".to_string(),
+                                            field_path: "metadata.name".to_string(),
                                             ..ObjectFieldSelector::default()
                                         }),
                                         ..EnvVarSource::default()
@@ -286,10 +288,11 @@ impl Network {
                                     ..EnvVar::default()
                                 },
                                 EnvVar {
+                                    // Router name is equal to the pod name
                                     name: "NDN_ROUTER_NAME".to_string(),
                                     value_from: Some(EnvVarSource {
                                         field_ref: Some(ObjectFieldSelector {
-                                            field_path: "spec.nodeName".to_string(),
+                                            field_path: "metadata.name".to_string(),
                                             ..ObjectFieldSelector::default()
                                         }),
                                         ..EnvVarSource::default()

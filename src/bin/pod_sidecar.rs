@@ -2,7 +2,7 @@ use operator::{
     controller::{Router, RouterStatus, ROUTER_MANAGER_NAME}, telemetry, Error
 };
 use futures::{TryStreamExt, pin_mut};
-use kube::{api::{Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client, ResourceExt};
+use kube::{api::{Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client};
 use serde_json::json;
 use std::{collections::BTreeSet, env};
 use std::process::Command;
@@ -15,23 +15,15 @@ async fn main() -> anyhow::Result<()> {
     let my_router_name = env::var("NDN_ROUTER_NAME")?;
     let client = Client::try_default().await?; 
     let api_router = Api::<Router>::namespaced(client, &network_namespace);
-    // Set my_router.status.online to true
-    let my_router = api_router.get(&my_router_name).await?;
-    let current_status = match my_router.status {
-        Some(ref status) => status.clone(),
-        None => RouterStatus {
-            online: false,
-            neighbors: BTreeSet::new(),
-        },
-    };
-    let status = json!({
+    // Set my status.online to true
+    let patch_status = json!({
         "status": RouterStatus{
-            online: true,
-            neighbors: current_status.neighbors,
+            online: Some(true),
+            ..RouterStatus::default()
         }
     });
     let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-    let _ = api_router.patch_status(&my_router.name_any(), &serverside, &Patch::Merge(&status)).await
+    let _ = api_router.patch_status(&my_router_name, &serverside, &Patch::Strategic(&patch_status)).await
         .map_err(Error::KubeError);
     info!("Set my router status to online");
     // Watch the neighbors in my_router's status and run `/ndnd dv link-create <URL>` or `/ndnd dv link-destroy <URL>` when it changes
@@ -42,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
     pin_mut!(watcher);
     while let Some(router) = watcher.try_next().await? {
         let new_neighbors = match router.status {
-            Some(ref status) => status.neighbors.clone(),
+            Some(ref status) => status.neighbors.clone().unwrap_or_default(),
             None => BTreeSet::<String>::new(),
         };
         let added_neighbors: BTreeSet<String> = new_neighbors.difference(&neighbors).cloned().collect();

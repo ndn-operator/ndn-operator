@@ -16,6 +16,12 @@ pub enum Error {
     // so boxing this error to break cycles
     FinalizerError(#[source] Box<kube::runtime::finalizer::Error<Error>>),
 
+    #[error("Missing Label: {0}")]
+    MissingLabel(String),
+    
+    #[error("Missing Annotation: {0}")]
+    MissingAnnotation(String),
+
     /// NB: this is a catch-all for any other errors
     #[error("Other Error: {0}")]
     OtherError(String),

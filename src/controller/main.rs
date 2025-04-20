@@ -1,21 +1,24 @@
-use super::{Network, Router, NETWORK_FINALIZER, ROUTER_FINALIZER};
-use crate::{Error, Result};
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
-
-use std::sync::Arc;
+use k8s_openapi::api::core::v1::Pod;
 use kube::{
-    api::{Api, ListParams, ResourceExt}, client::Client, runtime::{
+    api::{Api, ListParams, ResourceExt},
+    client::Client,
+    core::Expression,
+    runtime::{
         controller::{Action, Controller},
         events::{Recorder, Reporter},
         finalizer::{finalizer, Event as Finalizer},
         watcher,
-    }
+    },
 };
 use serde::Serialize;
+use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
+use super::{Network, Router, NETWORK_FINALIZER, ROUTER_FINALIZER, DS_LABEL_KEY, pod_apply, pod_cleanup};
+use crate::{Error, Result};
 
 
 // Context for our reconciler
@@ -53,6 +56,19 @@ async fn reconcile_router(router: Arc<Router>, ctx: Arc<Context>) -> Result<Acti
         match event {
             Finalizer::Apply(router) => router.reconcile(ctx.clone()).await,
             Finalizer::Cleanup(router) => router.cleanup(ctx.clone()).await,
+        }
+    })
+    .await
+    .map_err(|e| Error::FinalizerError(Box::new(e)))
+}
+
+async fn reconcile_pod(pod: Arc<Pod>, ctx: Arc<Context>) -> Result<Action> {
+    info!("Reconciling Pod \"{}\"", pod.name_any());
+    let api_pod: Api<Pod> = Api::all(ctx.client.clone());
+    finalizer(&api_pod, DS_LABEL_KEY, pod, async |event| {
+        match event {
+            Finalizer::Apply(pod) => pod_apply(pod, (*ctx).clone()).await,
+            Finalizer::Cleanup(pod) => pod_cleanup(pod, (*ctx).clone()).await,
         }
     })
     .await
@@ -114,6 +130,11 @@ fn router_error_policy(_: Arc<Router>, error: &Error, _: Arc<Context>) -> Action
     Action::requeue(Duration::from_secs(5 * 60))
 }
 
+fn pod_error_policy(_: Arc<Pod>, error: &Error, _: Arc<Context>) -> Action {
+    warn!("reconcile failed: {:?}", error);
+    Action::requeue(Duration::from_secs(1 * 60))
+}
+
 pub async fn run_nw(state: State) {
     let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
     let api_nw = Api::<Network>::all(client.clone());
@@ -140,6 +161,16 @@ pub async fn run_router(state: State) {
     Controller::new(api_router, watcher::Config::default().any_semantic())
         .shutdown_on_signal()
         .run(reconcile_router, router_error_policy, state.to_context(client.clone()).await)
+        .filter_map(async |x| { std::result::Result::ok(x) })
+        .for_each(async |_| ()).await;
+}
+
+pub async fn run_pod_sync(state: State) {
+    let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
+    let api_pod = Api::<Pod>::all(client.clone());
+    Controller::new(api_pod, watcher::Config::default().labels_from(&Expression::Exists(DS_LABEL_KEY.into()).into()))
+        .shutdown_on_signal()
+        .run(reconcile_pod, pod_error_policy, state.to_context(client.clone()).await)
         .filter_map(async |x| { std::result::Result::ok(x) })
         .for_each(async |_| ()).await;
 }
