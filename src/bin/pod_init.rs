@@ -112,19 +112,20 @@ async fn main() -> anyhow::Result<()> {
     },
     tcp6: None,
   };
-  let router_status = json!({
+  let patch_status = json!({
     "status": RouterStatus {
       faces: Some(faces),
       initialized: Some(true),
       ..RouterStatus::default()
     }
   });
+  debug!("Patch status: {:?}", patch_status);
   let pp = PatchParams::apply(ROUTER_MANAGER_NAME);
-  let _ = api_rt
-    .patch_status(&router_name, &pp, &Patch::Apply(router_status))
+  let router = api_rt
+    .patch_status(&router_name, &pp, &Patch::Apply(patch_status))
     .await
-    .map_err(Error::KubeError);
-  info!("Router status updated");
+    .map_err(Error::KubeError)?;
+  info!("Patched router status: {:?}", router.status);
 
   Ok(())
 }

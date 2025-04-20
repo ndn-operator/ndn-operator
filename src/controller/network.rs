@@ -174,6 +174,11 @@ impl Network {
                                     ..EnvVar::default()
                                 },
                                 EnvVar {
+                                    name: "RUST_LOG".to_string(),
+                                    value: Some("debug".to_string()),
+                                    ..EnvVar::default()
+                                },
+                                EnvVar {
                                     name: "NDN_NETWORK_NAMESPACE".to_string(),
                                     value_from: Some(EnvVarSource {
                                         field_ref: Some(ObjectFieldSelector {
@@ -274,6 +279,11 @@ impl Network {
                                 EnvVar {
                                     name: "NDN_NETWORK_NAME".to_string(),
                                     value: Some(self.name_any()),
+                                    ..EnvVar::default()
+                                },
+                                EnvVar {
+                                    name: "RUST_LOG".to_string(),
+                                    value: Some("debug".to_string()),
                                     ..EnvVar::default()
                                 },
                                 EnvVar {

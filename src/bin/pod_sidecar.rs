@@ -16,16 +16,18 @@ async fn main() -> anyhow::Result<()> {
     let client = Client::try_default().await?; 
     let api_router = Api::<Router>::namespaced(client, &network_namespace);
     // Set my status.online to true
+    info!("Set my router status to online");
     let patch_status = json!({
         "status": RouterStatus{
             online: Some(true),
             ..RouterStatus::default()
         }
     });
+    debug!("Patch status: {:?}", patch_status);
     let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-    let _ = api_router.patch_status(&my_router_name, &serverside, &Patch::Strategic(&patch_status)).await
-        .map_err(Error::KubeError);
-    info!("Set my router status to online");
+    let patched = api_router.patch_status(&my_router_name, &serverside, &Patch::Strategic(&patch_status)).await
+        .map_err(Error::KubeError)?;
+    info!("Patched router status: {:?}", patched.status);
     // Watch the neighbors in my_router's status and run `/ndnd dv link-create <URL>` or `/ndnd dv link-destroy <URL>` when it changes
     let wc = watcher::Config::default()
         .fields(format!("metadata.name={}", my_router_name).as_str());
