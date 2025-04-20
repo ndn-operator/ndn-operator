@@ -5,8 +5,9 @@
 ## Install
 ```
 helm repo add ndn-operator https://ndn-operator.github.io/ndn-operator
+helm repo update
 helm install ndn-operator-crd ndn-operator/ndn-operator-crd
-helm install ndn-operator ndn-operator/ndn-operator --namespace ndn --create-namespace
+helm install ndn-operator ndn-operator/ndn-operator
 ```
 ## Create your first ndn network
 network.yaml:

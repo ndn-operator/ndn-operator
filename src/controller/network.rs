@@ -51,14 +51,16 @@ pub struct NetworkStatus {
 impl Network {
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
         let api_nw: Api<Network> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
-        let api_ds: Api<DaemonSet> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let serverside = PatchParams::apply(NETWORK_MANAGER_NAME);
-        let my_pod_spec = get_my_pod(ctx.client.clone())
+        let my_pod = get_my_pod(ctx.client.clone())
             .await
-            .expect("Failed to get my pod")
+            .expect("Failed to get my pod");
+        let my_pod_spec = my_pod.clone()
             .spec
             .expect("Failed to get pod spec");
         let my_image = my_pod_spec.containers.first().expect("Failed to get my container").image.clone();
+        let my_ns = my_pod.namespace().expect("Failed to get pod namespace");
+        let api_ds: Api<DaemonSet> = Api::namespaced(ctx.client.clone(), &my_ns);
         let ds_data = self.create_owned_daemonset(my_image, my_pod_spec.service_account_name);
         let ds = api_ds.patch(&self.name_any(), &serverside, &Patch::Apply(ds_data)).await.map_err(Error::KubeError)?;
         // Publish event
@@ -236,7 +238,7 @@ impl Network {
                             name: "network".to_string(),
                             image: Some("ghcr.io/named-data/ndnd:20250405".to_string()),
                             command: vec!["/ndnd".to_string()].into(),
-                            args: Some(vec!["daemon".to_string(), container_config_path.to_string()].into()),
+                            args: Some(vec!["daemon".to_string(), container_config_path.to_string()]),
                             security_context: Some(SecurityContext {
                                 privileged: Some(true),
                                 ..SecurityContext::default()
@@ -273,7 +275,7 @@ impl Network {
                         },
                         Container {
                             name: "watch".to_string(),
-                            image: image,
+                            image,
                             command: vec!["/sidecar".to_string()].into(),
                             env: Some(vec![
                                 EnvVar {
@@ -329,8 +331,7 @@ impl Network {
                                 name: "config".to_string(),
                                 host_path: Some(HostPathVolumeSource {
                                     path: HOST_CONFIG_DIR.to_string(),
-                                    type_: Some("DirectoryOrCreate".to_string()),
-                                    ..HostPathVolumeSource::default()
+                                    type_: Some("DirectoryOrCreate".to_string())
                                 }),
                                 ..Volume::default()
                             },
@@ -338,8 +339,7 @@ impl Network {
                                 name: "run-ndnd".to_string(),
                                 host_path: Some(HostPathVolumeSource {
                                     path: HOST_SOCKET_DIR.to_string(),
-                                    type_: Some("DirectoryOrCreate".to_string()),
-                                    ..HostPathVolumeSource::default()
+                                    type_: Some("DirectoryOrCreate".to_string())
                                 }),
                                 ..Volume::default()
                             },

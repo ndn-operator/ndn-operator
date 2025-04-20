@@ -27,7 +27,7 @@ pub async fn pod_apply(pod: Arc<Pod>, ctx: Context) -> Result<Action> {
     let nw = api_nw
         .get(nw_name)
         .await
-        .map_err(|e| Error::KubeError(e))?;
+        .map_err(Error::KubeError)?;
     let node_name = pod
         .as_ref()
         .spec

@@ -153,7 +153,7 @@ impl Router {
                 &Event {
                     type_: EventType::Normal,
                     reason: "RouterUpdated".into(),
-                    note: Some(format!("Propagated my faces to all routers in the network")),
+                    note: Some("Propagated my faces to all routers in the network".to_string()),
                     action: "Updated".into(),
                     secondary: None,
                 },
@@ -262,7 +262,7 @@ pub fn create_owned_router(source: &Network, name: &String, node_name: &String) 
 
 pub fn is_router_created() -> impl Condition<Router> {
     |obj: Option<&Router>| {
-        return obj.is_some();
+        obj.is_some()
     }
 }
 

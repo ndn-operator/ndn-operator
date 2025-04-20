@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
-use super::{Network, Router, NETWORK_FINALIZER, ROUTER_FINALIZER, DS_LABEL_KEY, pod_apply, pod_cleanup};
+use super::{pod_apply, pod_cleanup, Network, Router, DS_LABEL_KEY, NETWORK_FINALIZER, ROUTER_FINALIZER};
 use crate::{controller::POD_FINALIZER, Error, Result};
 
 
@@ -133,7 +133,7 @@ fn router_error_policy(_: Arc<Router>, error: &Error, _: Arc<Context>) -> Action
 
 fn pod_error_policy(_: Arc<Pod>, error: &Error, _: Arc<Context>) -> Action {
     warn!("reconcile failed: {:?}", error);
-    Action::requeue(Duration::from_secs(1 * 60))
+    Action::requeue(Duration::from_secs(60))
 }
 
 pub async fn run_nw(state: State) {
