@@ -13,8 +13,8 @@ pub struct RouterConfig {
     pub neighbors: Option<Vec<Neighbor>>,
 }
 
-impl RouterConfig {
-    pub fn default() -> Self {
+impl Default for RouterConfig {
+    fn default() -> Self {
         Self {
             network: "ndn".to_string(),
             router: "ndnd".to_string(),
@@ -25,7 +25,6 @@ impl RouterConfig {
             neighbors: None,
         }
     }
-    
 }
 
 #[skip_serializing_none]
