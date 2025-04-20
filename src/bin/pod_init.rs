@@ -63,17 +63,11 @@ async fn main() -> anyhow::Result<()> {
 
   let local_ip = local_ip_address::local_ip();
   debug!("local ip: {:?}", local_ip);
-  let ip4 = match local_ip.ok() {
-    Some(ip) => {Some(ip.to_string())},
-    None => None,
-  };
+  let ip4 = local_ip.ok().map(|ip| ip.to_string());
 
   let local_ipv6 = local_ip_address::local_ipv6();
   debug!("local ip6: {:?}", local_ipv6);
-  let ip6 = match local_ip_address::local_ipv6().ok() {
-    Some(ip) => {Some(ip.to_string())},
-    None => None,
-  };
+  let ip6 = local_ip_address::local_ipv6().ok().map(|ip| ip.to_string());
   info!("local ip4: {:?}", ip4);
   info!("local ip6: {:?}", ip6);
   // Generate Ndnd config
@@ -96,25 +90,17 @@ async fn main() -> anyhow::Result<()> {
   // Patch the status of the existing router
   let faces = RouterFaces {
     udp4: {
-        if let Some(ip4) = ip4 {
-            Some(format!("udp://{ip4}:{udp_unicast_port}"))
-        } else {
-            None
-        }
+        ip4.map(|ip4| format!("udp://{ip4}:{udp_unicast_port}"))
     },
     tcp4: None,
     udp6: {
-        if let Some(ip6) = ip6 {
-            Some(format!("udp://[{ip6}]:{udp_unicast_port}"))
-        } else {
-            None
-        }
+        ip6.map(|ip6| format!("udp://[{ip6}]:{udp_unicast_port}"))
     },
     tcp6: None,
   };
   let patch_status = json!({
     "status": RouterStatus {
-      faces: faces,
+      faces,
       initialized: true,
       ..RouterStatus::default()
     }

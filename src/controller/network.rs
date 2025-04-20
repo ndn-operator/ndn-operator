@@ -238,7 +238,7 @@ impl Network {
                             name: "network".to_string(),
                             image: Some("ghcr.io/named-data/ndnd:20250405".to_string()),
                             command: vec!["/ndnd".to_string()].into(),
-                            args: Some(vec!["daemon".to_string(), container_config_path.to_string()].into()),
+                            args: Some(vec!["daemon".to_string(), container_config_path.to_string()]),
                             security_context: Some(SecurityContext {
                                 privileged: Some(true),
                                 ..SecurityContext::default()
@@ -275,7 +275,7 @@ impl Network {
                         },
                         Container {
                             name: "watch".to_string(),
-                            image: image,
+                            image,
                             command: vec!["/sidecar".to_string()].into(),
                             env: Some(vec![
                                 EnvVar {

@@ -53,7 +53,7 @@ async fn mutate_handler(body: AdmissionReview<DynamicObject>) -> Result<impl Rep
 
     let mut res = AdmissionResponse::from(&req);
     if let Some(obj) = req.object {
-        if let Some(pod) = obj.try_parse::<Pod>().ok() {
+        if let Ok(pod) = obj.try_parse::<Pod>() {
             let name = pod.name_any();
             if let Operation::Create = req.operation {
                 if let Some(network_name) = pod.annotations().get(ANNOTATION_NAME) {

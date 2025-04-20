@@ -133,7 +133,7 @@ fn router_error_policy(_: Arc<Router>, error: &Error, _: Arc<Context>) -> Action
 
 fn pod_error_policy(_: Arc<Pod>, error: &Error, _: Arc<Context>) -> Action {
     warn!("reconcile failed: {:?}", error);
-    Action::requeue(Duration::from_secs(1 * 60))
+    Action::requeue(Duration::from_secs(60))
 }
 
 pub async fn run_nw(state: State) {
