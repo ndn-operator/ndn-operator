@@ -120,11 +120,10 @@ impl Router {
             debug!("Router {} neighbors: {:?}", router.name_any(), new_neighbors);
             let patches = vec![
                 PatchOperation::Replace(
-                    ReplaceOperation
-                        {
-                            path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
-                            value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
-                        }
+                    ReplaceOperation{
+                        path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
+                        value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
+                    }
                 )
             ];
             let patch = Patch::Json::<()>(JsonPatch(patches));
@@ -193,11 +192,10 @@ impl Router {
             debug!("Router {} neighbors: {:?}", router.name_any(), new_neighbors);
             let patches = vec![
                 PatchOperation::Replace(
-                    ReplaceOperation
-                        {
-                            path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
-                            value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
-                        }
+                    ReplaceOperation{
+                        path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
+                        value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
+                    }
                 )
             ];
             let patch = Patch::Json::<()>(JsonPatch(patches));

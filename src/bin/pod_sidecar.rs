@@ -19,11 +19,10 @@ async fn main() -> anyhow::Result<()> {
     info!("Set my router status to online");
     let patches = vec![
         PatchOperation::Replace(
-            ReplaceOperation
-                {
-                    path: PointerBuf::from_tokens(vec!["status", "online"]),
-                    value: serde_json::to_value(true).unwrap(),
-                }
+            ReplaceOperation{
+                path: PointerBuf::from_tokens(vec!["status", "online"]),
+                value: serde_json::to_value(true).unwrap(),
+            }
         )
     ];
     let patch = Patch::Json::<()>(JsonPatch(patches));
