@@ -32,6 +32,9 @@ spec:
           status:
             nullable: true
             properties:
+              created:
+                nullable: true
+                type: boolean
               faces:
                 nullable: true
                 properties:

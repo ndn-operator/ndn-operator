@@ -36,6 +36,7 @@ pub struct RouterSpec {
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RouterStatus {
+    pub created: Option<bool>,
     pub initialized: Option<bool>,
     pub online: Option<bool>,
     pub faces: Option<RouterFaces>,
@@ -45,6 +46,7 @@ pub struct RouterStatus {
 impl Default for RouterStatus {
     fn default() -> Self {
         RouterStatus {
+            created: None,
             initialized: None,
             online: None,
             faces: None,
@@ -135,9 +137,10 @@ impl Router {
             for face in &my_faces {
                 new_neighbors.insert(face.to_string());
             }
-            // Patch only neighbors
+            // Patch only neighbors field
             let patch_status = json!({
                 "status": RouterStatus{
+                    created: None,
                     initialized: None,
                     online: None,
                     faces: None,
@@ -206,9 +209,10 @@ impl Router {
             for face in &my_faces {
                 new_neighbors.remove(&face.to_string());
             }
-            // Patch only neighbors
+            // Patch only neighbors field
             let patch_status = json!({
                 "status": RouterStatus{
+                    created: None,
                     initialized: None,
                     online: None,
                     faces: None,
@@ -219,7 +223,7 @@ impl Router {
             debug!("Status: {:?}", patch_status);
             let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
             let _ = api_router.patch_status(&router.name_any(), &serverside, &Patch::Strategic(&patch_status)).await
-                .map_err(Error::KubeError);
+                .map_err(Error::KubeError)?;
             ctx.recorder
                 .publish(
                     &Event {
@@ -272,15 +276,18 @@ pub fn create_owned_router(source: &Network, name: &String, node_name: &String) 
             prefix: source.spec.prefix.clone(),
             node_name: node_name.to_string(),
         },
-        status: Some(RouterStatus::default())
+        status: None,
     }
 }
 
 pub fn is_router_created() -> impl Condition<Router> {
     |obj: Option<&Router>| {
         if let Some(router) = &obj {
-            debug!("Router created: {:?}", router);
-            return true;
+            if let Some(status) = &router.status {
+                if let Some(created) = &status.created {
+                    return created == &true;
+                }
+            }
         }
         false
     }
@@ -292,6 +299,19 @@ pub fn is_router_online() -> impl Condition<Router> {
             if let Some(status) = &router.status {
                 if let Some(online) = &status.online {
                     return online == &true;
+                }
+            }
+        }
+        false
+    }
+}
+
+pub fn is_router_initialized() -> impl Condition<Router> {
+    |obj: Option<&Router>| {
+        if let Some(router) = &obj {
+            if let Some(status) = &router.status {
+                if let Some(initialized) = &status.initialized {
+                    return initialized == &true;
                 }
             }
         }

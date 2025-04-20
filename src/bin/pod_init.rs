@@ -120,9 +120,9 @@ async fn main() -> anyhow::Result<()> {
     }
   });
   debug!("Patch status: {:?}", patch_status);
-  let pp = PatchParams::apply(ROUTER_MANAGER_NAME);
+  let pp = PatchParams::default();
   let router = api_rt
-    .patch_status(&router_name, &pp, &Patch::Apply(patch_status))
+    .patch_status(&router_name, &pp, &Patch::Strategic(patch_status))
     .await
     .map_err(Error::KubeError)?;
   info!("Patched router status: {:?}", router.status);

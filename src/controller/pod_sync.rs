@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
-use crate::{Error, Result};
+use crate::{controller::RouterStatus, Error, Result};
 use k8s_openapi::api::core::v1::Pod;
 use kube::{
     api::{DeleteParams, Patch, PatchParams},
     runtime::controller::Action,
     ResourceExt,
 };
+use serde_json::json;
 use tracing::*;
 
 use super::{create_owned_router, Context, DS_LABEL_KEY, Network, Router};
@@ -41,7 +42,20 @@ pub async fn pod_apply(pod: Arc<Pod>, ctx: Context) -> Result<Action> {
     let _ = api_rt
       .patch(&router_name, &pp, &Patch::Apply(router_data))
       .await
-      .map_err(Error::KubeError);
+      .map_err(Error::KubeError)?;
+
+    // Add status.created to the router
+    let patch_status = json!({
+        "status": RouterStatus {
+            created: Some(true),
+            ..RouterStatus::default()
+        }
+    });
+    debug!("Patch status: {:?}", patch_status);
+    let _ = api_rt
+      .patch_status(&router_name, &pp, &Patch::Strategic(patch_status))
+      .await
+      .map_err(Error::KubeError)?;
 
     Ok(Action::await_change())
 }
