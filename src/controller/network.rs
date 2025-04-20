@@ -331,8 +331,7 @@ impl Network {
                                 name: "config".to_string(),
                                 host_path: Some(HostPathVolumeSource {
                                     path: HOST_CONFIG_DIR.to_string(),
-                                    type_: Some("DirectoryOrCreate".to_string()),
-                                    ..HostPathVolumeSource::default()
+                                    type_: Some("DirectoryOrCreate".to_string())
                                 }),
                                 ..Volume::default()
                             },
@@ -340,8 +339,7 @@ impl Network {
                                 name: "run-ndnd".to_string(),
                                 host_path: Some(HostPathVolumeSource {
                                     path: HOST_SOCKET_DIR.to_string(),
-                                    type_: Some("DirectoryOrCreate".to_string()),
-                                    ..HostPathVolumeSource::default()
+                                    type_: Some("DirectoryOrCreate".to_string())
                                 }),
                                 ..Volume::default()
                             },

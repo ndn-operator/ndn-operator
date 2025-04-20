@@ -146,7 +146,6 @@ fn create_volume(network: &Network) -> Volume {
         host_path: Some(HostPathVolumeSource {
             path: network.host_socket_path(),
             type_: Some("Socket".to_string()),
-            ..HostPathVolumeSource::default()
         }),
         ..Volume::default()
     }
