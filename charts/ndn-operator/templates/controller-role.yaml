@@ -2,7 +2,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: ndn-controller-{{ .Release.Name }}
-  namepace: {{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     named-data.net/component: ndn-controller
     named-data.net/instance: {{ .Release.Name }}
