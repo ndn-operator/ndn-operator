@@ -63,8 +63,9 @@ async fn reconcile_router(router: Arc<Router>, ctx: Arc<Context>) -> Result<Acti
 }
 
 async fn reconcile_pod(pod: Arc<Pod>, ctx: Arc<Context>) -> Result<Action> {
-    info!("Reconciling Pod \"{}\"", pod.name_any());
-    let api_pod: Api<Pod> = Api::all(ctx.client.clone());
+    let ns = pod.namespace().unwrap();
+    let api_pod: Api<Pod> = Api::namespaced(ctx.client.clone(), &ns);
+    info!("Reconciling Pod \"{}\" in {}", pod.name_any(), ns);
     finalizer(&api_pod, DS_LABEL_KEY, pod, async |event| {
         match event {
             Finalizer::Apply(pod) => pod_apply(pod, (*ctx).clone()).await,

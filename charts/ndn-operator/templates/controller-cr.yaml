@@ -7,8 +7,11 @@ metadata:
     named-data.net/instance: {{ .Release.Name }}
 rules:
 - apiGroups: [""]
-  resources: ["pods", "nodes"]
+  resources: ["nodes"]
   verbs: ["get", "watch", "list"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list", "patch"]
 - apiGroups: ["named-data.net"]
   resources: ["networks"]
   verbs: ["get", "watch", "list", "update", "patch"]
