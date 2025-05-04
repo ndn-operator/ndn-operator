@@ -21,6 +21,7 @@ use kube::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use serde_with::skip_serializing_none;
 use std::{collections::BTreeMap, sync::Arc};
 
 pub static NETWORK_FINALIZER: &str = "network.named-data.net/finalizer";
@@ -32,14 +33,30 @@ pub static CONTAINER_SOCKET_DIR: &str = "/run/ndnd";
 pub static HOST_CONFIG_DIR: &str = "/etc/ndnd";
 pub static HOST_SOCKET_DIR: &str = "/run/ndnd";
 
-#[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[kube(group = "named-data.net", version = "v1alpha1", kind = "Network", namespaced, shortname = "nw")]
+#[kube(group = "named-data.net", version = "v1alpha1", kind = "Network", derive="Default", namespaced, shortname = "nw")]
 #[kube(status = "NetworkStatus")]
 pub struct NetworkSpec {
     pub prefix: String,
     pub udp_unicast_port: i32,
     pub node_selector: Option<BTreeMap<String, String>>,
+    pub ndnd: Option<Ndnd>,
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Ndnd {
+    pub image: String,
+}
+
+impl Default for Ndnd {
+    fn default() -> Self {
+        Self {
+            image: "ghcr.io/named-data/ndnd:latest".to_string(),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
@@ -236,7 +253,7 @@ impl Network {
                         }]),
                         containers: vec![Container {
                             name: "network".to_string(),
-                            image: Some("ghcr.io/named-data/ndnd:20250405".to_string()),
+                            image: Some(self.spec.ndnd.clone().unwrap_or_default().image),
                             command: vec!["/ndnd".to_string()].into(),
                             args: Some(vec!["daemon".to_string(), container_config_path.to_string()]),
                             security_context: Some(SecurityContext {
@@ -386,11 +403,7 @@ impl TryFrom<OwnerReference> for Network {
                 name: Some(name),
                 ..Default::default()
             },
-            spec: NetworkSpec {
-                prefix: String::new(),
-                udp_unicast_port: 0,
-                node_selector: None,
-            },
+            spec: NetworkSpec::default(),
             status: None,
         })
     }
