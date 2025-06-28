@@ -21,6 +21,14 @@ spec:
         properties:
           spec:
             properties:
+              ndnd:
+                nullable: true
+                properties:
+                  image:
+                    type: string
+                required:
+                - image
+                type: object
               nodeSelector:
                 additionalProperties:
                   type: string

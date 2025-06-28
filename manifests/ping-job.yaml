@@ -8,14 +8,13 @@ spec:
     metadata:
       annotations:
         networks.named-data.net/name: test
-        networks.named-data.net/namespace: ndn
       labels:
         named-data.net/inject: "true"
     spec:
       restartPolicy: Never
       containers:
       - name: ping
-        image: ghcr.io/named-data/ndnd:20250405
+        image: ghcr.io/named-data/ndnd:latest
         command: ["/ndnd", "ping"]
         args: ["/test/pingserver", "--interval", "5000", "--count", "20"]
         imagePullPolicy: IfNotPresent

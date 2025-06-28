@@ -9,7 +9,7 @@ metadata:
 spec:
   containers:
   - name: server
-    image: ghcr.io/named-data/ndnd:20250405
+    image: ghcr.io/named-data/ndnd:latest
     command: ["/ndnd", "pingserver"]
     args: ["/test/pingserver"]
     imagePullPolicy: IfNotPresent
