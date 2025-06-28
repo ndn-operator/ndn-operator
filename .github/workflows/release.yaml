@@ -5,13 +5,18 @@ on:
     - v*
 jobs:
   release:
-    permissions:
-      contents: write
     runs-on: ubuntu-latest
     steps:
+    - name: Generate a token
+      id: generate-token
+      uses: actions/create-github-app-token@v2
+      with:
+        app-id: ${{ vars.RELEASER_APP_ID }}
+        private-key: ${{ secrets.RELEASER_PRIVATE_KEY }}
     - name: Checkout code
       uses: actions/checkout@v4
-      
+      with:
+        token: ${{ steps.generate-token.outputs.token }}
     - name: Parse ref
       id: semver_parser 
       uses: booxmedialtd/ws-action-parse-semver@v1
@@ -35,5 +40,6 @@ jobs:
         author_email: "${{ github.actor }}@users.noreply.github.com"
         message: "Release version ${{ steps.semver_parser.outputs.fullversion }}"
         new_branch: "release/${{ steps.semver_parser.outputs.major }}.${{ steps.semver_parser.outputs.minor }}"
+        push: "origin release/${{ steps.semver_parser.outputs.major }}.${{ steps.semver_parser.outputs.minor }} --force"
 
 
