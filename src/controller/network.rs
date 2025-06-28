@@ -187,8 +187,7 @@ impl Network {
                     verbs: vec!["*".to_string()],
                     ..PolicyRule::default()
                 },
-            ]),
-            ..Role::default()
+            ])
         }
     }
 
@@ -212,8 +211,7 @@ impl Network {
                     namespace: Some(self.namespace().unwrap()),
                     ..Subject::default()
                 },
-            ]),
-            ..RoleBinding::default()
+            ])
         }
     }
 
