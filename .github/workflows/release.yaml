@@ -1,0 +1,39 @@
+name: Push to release branch
+on:
+  push:
+    tags:
+    - v*
+jobs:
+  release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Parse ref
+      id: semver_parser 
+      uses: booxmedialtd/ws-action-parse-semver@v1
+      with:
+        input_string: "${{ github.ref }}"
+        version_extractor_regex: '\/v(.*)$'
+    - name: Update crd chart
+      uses: rmeneely/update-yaml@v1
+      with:
+        infile: charts/ndn-operator-crd/Chart.yaml
+        varlist: version=${{ steps.semver_parser.outputs.fullversion }},appVersion=${{ steps.semver_parser.outputs.fullversion }}
+    - name: Update operator chart
+      uses: rmeneely/update-yaml@v1
+      with:
+        infile: charts/ndn-operator/Chart.yaml
+        varlist: version=${{ steps.semver_parser.outputs.fullversion }},appVersion=${{ steps.semver_parser.outputs.fullversion }}
+    - name: Commit and push to release branch
+      uses: EndBug/add-and-commit@v9
+      with:
+        author_name: "${{ github.actor }}"
+        author_email: "${{ github.actor }}@users.noreply.github.com"
+        message: "Release version ${{ steps.semver_parser.outputs.fullversion }}"
+        new_branch: "release/${{ steps.semver_parser.outputs.major }}.${{ steps.semver_parser.outputs.minor }}"
+
+
