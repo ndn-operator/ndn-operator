@@ -1,6 +1,6 @@
 [package]
 name = "ndn-operator"
-version = "0.2.3"
+version = "0.3.0+d548732"
 edition = "2024"
 
 [lib]
