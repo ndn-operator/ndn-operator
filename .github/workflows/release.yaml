@@ -44,19 +44,19 @@ jobs:
       uses: rmeneely/update-yaml@v1
       with:
         infile: charts/ndn-operator-crd/Chart.yaml
-        varlist: version=${{ steps.version.outputs.number }},appVersion=${{ steps.ccv.outputs.new-tag-version }}
+        varlist: version=${{ steps.version.outputs.number }},appVersion=${{ steps.version.outputs.number }}
     - name: Update operator chart
       if: steps.ccv.outputs.new-tag == 'true'
       uses: rmeneely/update-yaml@v1
       with:
         infile: charts/ndn-operator/Chart.yaml
-        varlist: version=${{ steps.version.outputs.number }},appVersion=${{ steps.ccv.outputs.new-tag-version }}
+        varlist: version=${{ steps.version.outputs.number }},appVersion=${{ steps.version.outputs.number }}
     - name: Update image tag in values.yaml
       if: steps.ccv.outputs.new-tag == 'true'
       uses: rmeneely/update-yaml@v1
       with:
         infile: charts/ndn-operator/values.yaml
-        varlist: image.tag=${{ steps.ccv.outputs.new-tag-version }}
+        varlist: image.tag=${{ steps.version.outputs.number }}
     - name: Update Cargo.toml
       if: steps.ccv.outputs.new-tag == 'true'
       uses: colathro/toml-editor@1.1.0
