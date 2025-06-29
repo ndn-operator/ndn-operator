@@ -1,8 +1,8 @@
 name: Push to release branch
 on:
   push:
-    tags:
-    - v*
+    branches:
+    - release/*
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -17,34 +17,48 @@ jobs:
       uses: actions/checkout@v4
       with:
         token: ${{ steps.generate-token.outputs.token }}
-    - name: Parse ref
-      id: semver_parser 
-      uses: booxmedialtd/ws-action-parse-semver@v1
+    - name: Bump tag if necessary
+      id: ccv
+      uses: smlx/ccv@v0.10
       with:
-        input_string: "${{ github.ref }}"
-        version_extractor_regex: '\/v(.*)$'
-    - name: Update crd chart
+        write-tag: false
+    - name: Get the version without the 'v' prefix
+      if: steps.ccv.outputs.new-tag == 'true'
+      id: version
+      env:
+        VERSION_TAG: "${{ steps.ccv.outputs.new-version-tag }}"
+      run: |
+        echo "number=${VERSION_TAG#v}" >> $GITHUB_OUTPUT
+    - name: Update CRD chart
+      if: steps.ccv.outputs.new-tag == 'true'
       uses: rmeneely/update-yaml@v1
       with:
         infile: charts/ndn-operator-crd/Chart.yaml
-        varlist: version=${{ steps.semver_parser.outputs.fullversion }},appVersion=${{ steps.semver_parser.outputs.fullversion }}
+        varlist: version=${{ steps.version.outputs.number }},appVersion=${{ steps.ccv.outputs.new-version-tag }}
     - name: Update operator chart
+      if: steps.ccv.outputs.new-tag == 'true'
       uses: rmeneely/update-yaml@v1
       with:
         infile: charts/ndn-operator/Chart.yaml
-        varlist: version=${{ steps.semver_parser.outputs.fullversion }},appVersion=${{ steps.semver_parser.outputs.fullversion }}
+        varlist: version=${{ steps.version.outputs.number }},appVersion=${{ steps.ccv.outputs.new-version-tag }}
     - name: Update image tag in values.yaml
+      if: steps.ccv.outputs.new-tag == 'true'
       uses: rmeneely/update-yaml@v1
       with:
         infile: charts/ndn-operator/values.yaml
-        varlist: image.tag=${{ steps.semver_parser.outputs.fullversion }}
-    - name: Commit and push to release branch
+        varlist: image.tag=${{ steps.ccv.outputs.new-version-tag }}
+    - name: Update Cargo.toml
+      if: steps.ccv.outputs.new-tag == 'true'
+      uses: ciiiii/toml-editor@1
+      with:
+        file: Cargo.toml
+        key: package.version
+        value: ${{ steps.version.outputs.number }}
+    - name: Commit and push
+      if: steps.ccv.outputs.new-tag == 'true'
       uses: EndBug/add-and-commit@v9
       with:
         author_name: "${{ github.actor }}"
         author_email: "${{ github.actor }}@users.noreply.github.com"
-        message: "Release version ${{ steps.semver_parser.outputs.fullversion }}"
-        new_branch: "release/${{ steps.semver_parser.outputs.major }}.${{ steps.semver_parser.outputs.minor }}"
-        push: "origin release/${{ steps.semver_parser.outputs.major }}.${{ steps.semver_parser.outputs.minor }} --force"
-
-
+        message: "chore(release): Bump version to ${{ steps.ccv.outputs.new-version-tag }}"
+        tag: ${{ steps.ccv.outputs.new-version-tag }}
