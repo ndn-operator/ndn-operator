@@ -32,13 +32,15 @@ jobs:
         NEW_TAG: ${{ steps.ccv.outputs.new-tag }}
         NEW_TAG_VERSION: ${{ steps.ccv.outputs.new-tag-version }}
         NEW_TAG_VERSION_TYPE: ${{ steps.ccv.outputs.new-tag-version-type }}
-    - name: Get the version without the 'v' prefix
+    - name: Get the short version
       if: steps.ccv.outputs.new-tag == 'true'
       id: version
       env:
         VERSION_TAG: "${{ steps.ccv.outputs.new-tag-version }}"
+        FULL_SHA: "${{ github.sha }}"
       run: |
         echo "number=${VERSION_TAG#v}" >> $GITHUB_OUTPUT
+        echo "sha_short=$(git rev-parse --short $FULL_SHA)" >> $GITHUB_OUTPUT
     - name: Update CRD chart
       if: steps.ccv.outputs.new-tag == 'true'
       uses: rmeneely/update-yaml@v1
@@ -63,7 +65,10 @@ jobs:
       with:
         file: Cargo.toml
         key: package.version
-        value: ${{ steps.version.outputs.number }}
+        value: ${{ steps.version.outputs.number }}+${{ steps.version.outputs.sha_short }}
+    - name: Update Cargo.lock
+      if: steps.ccv.outputs.new-tag == 'true'
+      run: cargo update
     - name: Commit and push
       if: steps.ccv.outputs.new-tag == 'true'
       uses: EndBug/add-and-commit@v9
