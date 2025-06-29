@@ -144,7 +144,7 @@ impl Network {
     }
 
     pub fn host_socket_path(&self) -> String {
-        format!("{}/{}", HOST_SOCKET_DIR, self.socket_file_name())
+        format!("{}/{}/{}", HOST_SOCKET_DIR, self.namespace().unwrap(), self.socket_file_name())
     }
 
     fn config_file_name(&self) -> String {
@@ -156,7 +156,7 @@ impl Network {
     }
 
     pub fn host_config_path(&self) -> String {
-        format!("{}/{}", HOST_CONFIG_DIR, self.config_file_name())
+        format!("{}/{}/{}", HOST_CONFIG_DIR, self.namespace().unwrap(), self.config_file_name())
     }
 
     fn create_owned_sa(&self) -> ServiceAccount {
