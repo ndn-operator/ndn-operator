@@ -1,0 +1,101 @@
+{{- $host := printf "ndn-injector.%s.svc" .Release.Namespace -}}
+
+{{- if not .Values.injector.useCertManager -}}
+{{- /* Generate a single CA and a certificate signed by it. */}}
+{{- $ca := genCA "ndn-injector-ca" 365 -}}
+{{- $cert := genSignedCert $host nil (list $host) 365 $ca -}}
+---
+# This secret provides the TLS key and certificate for the injector pod.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ndn-injector-tls
+  namespace: {{ .Release.Namespace }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ $cert.Cert | b64enc }}
+  tls.key: {{ $cert.Key | b64enc }}
+  ca.crt: {{ $ca.Cert | b64enc }}
+---
+# This webhook configuration tells the K8s API server how to call the injector.
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: ndn-injector
+webhooks:
+  - name: ndn-injector.named-data.net
+    clientConfig:
+      # The caBundle must be the CA that signed the injector's server certificate.
+      caBundle: {{ $ca.Cert | b64enc }}
+      service:
+        name: ndn-injector
+        namespace: {{ .Release.Namespace }}
+        path: "/"
+    rules:
+      - operations: ["CREATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+    objectSelector:
+      matchExpressions:
+      - key: named-data.net/inject
+        operator: In
+        values: ["true", "yes", "1", "enable", "enabled"]
+    failurePolicy: Fail
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    timeoutSeconds: 5
+
+{{- else }}
+{{- /* Logic for when cert-manager is used */}}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-ndn-injector
+  namespace: {{ .Release.Namespace }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ndn-injector-certificate
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: ndn-injector-tls
+  dnsNames:
+  - {{ $host }}
+  issuerRef:
+    name: selfsigned-ndn-injector
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: ndn-injector
+  annotations:
+    # cert-manager will automatically inject the correct caBundle here.
+    cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/ndn-injector-certificate"
+webhooks:
+  - name: ndn-injector.named-data.net
+    clientConfig:
+      # caBundle is injected by cert-manager
+      service:
+        name: ndn-injector
+        namespace: {{ .Release.Namespace }}
+        path: "/"
+    rules:
+      - operations: ["CREATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+    objectSelector:
+      matchExpressions:
+      - key: named-data.net/inject
+        operator: In
+        values: ["true", "yes", "1", "enable", "enabled"]
+    failurePolicy: Fail
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    timeoutSeconds: 5
+{{- end }}

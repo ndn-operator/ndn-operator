@@ -13,7 +13,5 @@ resources:
     cpu: 100m
     memory: 128Mi
 
-inject:
-  caBundle: ""
-  crtPEM: ""
-  keyPEM: ""
+injector:
+  useCertManager: false
