@@ -183,8 +183,22 @@ impl Network {
             rules: Some(vec![
                 PolicyRule {
                     api_groups: Some(vec!["named-data.net".to_string()]),
-                    resources: Some(vec!["routers".to_string(), "routers/status".to_string()]),
+                    resources: Some(vec!["routers/status".to_string()]),
                     verbs: vec!["update".to_string(), "patch".to_string()],
+                    ..PolicyRule::default()
+                },
+                PolicyRule {
+                    api_groups: Some(vec!["named-data.net".to_string()]),
+                    resources: Some(vec!["routers".to_string()]),
+                    verbs: vec![
+                        "get".to_string(),
+                        "list".to_string(),
+                        "watch".to_string(),
+                        "create".to_string(),
+                        "delete".to_string(),
+                        "patch".to_string(),
+                        "update".to_string(),
+                    ],
                     ..PolicyRule::default()
                 },
             ])

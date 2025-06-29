@@ -17,7 +17,7 @@ rules:
   verbs: ["get", "watch", "list", "update", "patch"]
 - apiGroups: ["named-data.net"]
   resources: ["routers"]
-  verbs: ["create", "get", "watch", "list", "update", "patch"]
+  verbs: ["create", "get", "watch", "list", "update", "patch", "delete"]
 - apiGroups: ["named-data.net"]
   resources: ["networks/status", "routers/status"]
   verbs: ["update", "patch"]
