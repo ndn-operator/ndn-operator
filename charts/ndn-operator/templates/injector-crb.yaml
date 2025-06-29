@@ -1,12 +1,12 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: ndn-inject-{{ .Release.Name }}
+  name: ndn-injector-{{ .Release.Name }}
 subjects:
 - kind: ServiceAccount
-  name: ndn-inject
+  name: ndn-injector
   namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: ndn-inject-{{ .Release.Name }}
+  name: ndn-injector-{{ .Release.Name }}
   apiGroup: rbac.authorization.k8s.io
