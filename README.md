@@ -3,96 +3,54 @@
 **NDN Operator** is a Kubernetes operator that integrates [Named Data Networking](https://github.com/named-data) into your Kubernetes cluster
 
 ## Install
-```
+```shell
 helm repo add ndn-operator https://ndn-operator.github.io/ndn-operator
 helm repo update
 helm install ndn-operator-crd ndn-operator/ndn-operator-crd
 helm install ndn-operator ndn-operator/ndn-operator
 ```
 ## Create your first ndn network
-network.yaml:
-```yaml
-apiVersion: named-data.net/v1alpha1
-kind: Network
-metadata:
-  name: test
-spec:
-  prefix: /test
-  udpUnicastPort: 6363
-```
-```
-kubectl apply -f network.yaml
+
+```shell
+kubectl create ns mynetwork
+kubectl apply --namespace mynetwork \
+    -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/minimal/network.yaml
 ```
 
 ### Pingserver
-pod.yaml:
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: test-pingserver
-  annotations:
-    networks.named-data.net/name: test
-  labels:
-    named-data.net/inject: "true"
-spec:
-  containers:
-  - name: server
-    image: ghcr.io/named-data/ndnd:latest
-    command: ["/ndnd", "pingserver"]
-    args: ["/test/pingserver"]
-```
-```
-kubectl apply -f pod.yaml
+Producers and consumers may live in different k8s namespaces from the network, and from each other
+```shell
+kubectl apply -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/minimal/producer-pod.yaml
 ```
 
-job.yaml:
-```yaml
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: test-ping
-spec:
-  ttlSecondsAfterFinished: 600
-  template:
-    metadata:
-      annotations:
-        networks.named-data.net/name: test
-      labels:
-        named-data.net/inject: "true"
-    spec:
-      restartPolicy: Never
-      containers:
-      - name: ping
-        image: ghcr.io/named-data/ndnd:latest
-        command: ["/ndnd", "ping"]
-        args: ["/test/pingserver", "--interval", "5000", "--count", "20"]
+```shell
+kubectl apply -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/minimal/consumer-job.yaml
 ```
 
 ## Architecture
+NDN Operator has two main services:
+* Controller. It utilizes DaemonSets to configure and run `ndnd` on each node
+* Injector. It uses mutating webhooks to mount ndnd socket into every pod with label `named-data.net/inject: "true"`
 ```mermaid
-flowchart TB
+flowchart LR
   subgraph N[Network]
   direction LR
-    subgraph n_A[Node A]
+    subgraph r_A[Node A]
     direction TB
-      app_a1[Container 1]:::dotted <--unix socket--> ndnd_a[NDN daemon]
+      app_a1[Container 1]:::dotted <--unix socket--> ndnd_a1[NDN daemon]
     end
-    subgraph n_B[Node B]
+    subgraph r_B[Node B]
     direction TB
-      app_b2[Container 2]:::dotted <--unix socket--> ndnd_b[NDN daemon]
+      app_b1[Container 2]:::dotted <--unix socket--> ndnd_b1[NDN daemon]
     end
-    subgraph n_C[Node C]
+    subgraph r_C[Node C]
     direction TB
-      app_b3[Container 3]:::dotted <--unix socket--> ndnd_c[NDN daemon]
+      app_c1[Container 3]:::dotted <--unix socket--> ndnd_c1[NDN daemon]
     end
-    n_A <--ip--> n_B <--ip--> n_C
+    r_A <--udp--> r_B <--udp--> r_C
   end
-  subgraph operator[NDN Operator]
-  direction LR
-  controller --watch--> C@{ shape: docs, label: "K8S Resources"}
-  end
-  operator --manage--> N
+
+
   classDef dotted stroke-dasharray: 5 5
 ```
 
@@ -102,12 +60,12 @@ flowchart TB
 * Multi-cluster support
 
 ## Roadmap
-1. Basic functionality
+1. Basic functionality ✅
     * `Network` resource that creates a simple unsecured network
     * Pod annotations, assigning it to a particular network
-1. TLS
+1. TLS 🚧
     * Self-signed root CA
-1. Advanced use
+1. Advanced use ⏳
     * Expose NDN faces outside
     * Obtain certificates from Testbed
     * K8S resources to manage NDN faces, strategies and links
