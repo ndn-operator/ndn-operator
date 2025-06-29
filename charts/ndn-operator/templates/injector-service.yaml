@@ -1,14 +1,14 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: ndn-inject
+  name: ndn-injector
   namespace: {{ .Release.Namespace }}
 spec:
   type: ClusterIP
   selector:
-    named-data.net/component: ndn-inject
+    named-data.net/component: ndn-injector
     named-data.net/instance: {{ .Release.Name }}
   ports:
-  - name: ndn-inject
+  - name: ndn-injector
     port: 443
     targetPort: https
