@@ -184,7 +184,7 @@ impl Network {
                 PolicyRule {
                     api_groups: Some(vec!["named-data.net".to_string()]),
                     resources: Some(vec!["routers".to_string(), "routers/status".to_string()]),
-                    verbs: vec!["*".to_string()],
+                    verbs: vec!["update".to_string(), "patch".to_string()],
                     ..PolicyRule::default()
                 },
             ])
