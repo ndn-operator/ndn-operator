@@ -144,7 +144,7 @@ impl Network {
     }
 
     pub fn host_socket_path(&self) -> String {
-        format!("{}/{}", HOST_SOCKET_DIR, self.socket_file_name())
+        format!("{}/{}/{}", HOST_SOCKET_DIR, self.namespace().unwrap(), self.socket_file_name())
     }
 
     fn config_file_name(&self) -> String {
@@ -156,7 +156,7 @@ impl Network {
     }
 
     pub fn host_config_path(&self) -> String {
-        format!("{}/{}", HOST_CONFIG_DIR, self.config_file_name())
+        format!("{}/{}/{}", HOST_CONFIG_DIR, self.namespace().unwrap(), self.config_file_name())
     }
 
     fn create_owned_sa(&self) -> ServiceAccount {
@@ -183,8 +183,22 @@ impl Network {
             rules: Some(vec![
                 PolicyRule {
                     api_groups: Some(vec!["named-data.net".to_string()]),
-                    resources: Some(vec!["routers".to_string(), "routers/status".to_string()]),
-                    verbs: vec!["*".to_string()],
+                    resources: Some(vec!["routers/status".to_string()]),
+                    verbs: vec!["update".to_string(), "patch".to_string()],
+                    ..PolicyRule::default()
+                },
+                PolicyRule {
+                    api_groups: Some(vec!["named-data.net".to_string()]),
+                    resources: Some(vec!["routers".to_string()]),
+                    verbs: vec![
+                        "get".to_string(),
+                        "list".to_string(),
+                        "watch".to_string(),
+                        "create".to_string(),
+                        "delete".to_string(),
+                        "patch".to_string(),
+                        "update".to_string(),
+                    ],
                     ..PolicyRule::default()
                 },
             ])

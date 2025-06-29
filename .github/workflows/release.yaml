@@ -33,6 +33,11 @@ jobs:
       with:
         infile: charts/ndn-operator/Chart.yaml
         varlist: version=${{ steps.semver_parser.outputs.fullversion }},appVersion=${{ steps.semver_parser.outputs.fullversion }}
+    - name: Update image tag in values.yaml
+      uses: rmeneely/update-yaml@v1
+      with:
+        infile: charts/ndn-operator/values.yaml
+        varlist: image.tag=${{ steps.semver_parser.outputs.fullversion }}
     - name: Commit and push to release branch
       uses: EndBug/add-and-commit@v9
       with:
