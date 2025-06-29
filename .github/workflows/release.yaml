@@ -25,8 +25,9 @@ jobs:
     - name: Get the version without the 'v' prefix
       if: steps.ccv.outputs.new-tag == 'true'
       id: version
+      env:
+        VERSION_TAG: "${{ steps.ccv.outputs.new-version-tag }}"
       run: |
-        VERSION_TAG=${{ steps.ccv.outputs.new-version-tag }}
         echo "number=${VERSION_TAG#v}" >> $GITHUB_OUTPUT
     - name: Update CRD chart
       if: steps.ccv.outputs.new-tag == 'true'
