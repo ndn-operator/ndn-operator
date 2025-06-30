@@ -4,6 +4,7 @@ metadata:
   name: test-pingserver
   annotations:
     networks.named-data.net/name: test
+    networks.named-data.net/namespace: mynetwork
   labels:
     named-data.net/inject: "true"
 spec:

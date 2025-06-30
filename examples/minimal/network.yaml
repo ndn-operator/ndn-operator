@@ -2,6 +2,7 @@ apiVersion: named-data.net/v1alpha1
 kind: Network
 metadata:
   name: test
+  namespace: mynetwork
 spec:
   prefix: /test
   udpUnicastPort: 6363

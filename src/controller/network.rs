@@ -29,8 +29,10 @@ pub static NETWORK_LABEL_KEY: &str = "network.named-data.net/name";
 pub static DS_LABEL_KEY : &str = "network.named-data.net/managed-by";
 pub static CONTAINER_CONFIG_DIR: &str = "/etc/ndnd";
 pub static CONTAINER_SOCKET_DIR: &str = "/run/ndnd";
-pub static HOST_CONFIG_DIR: &str = "/etc/ndnd";
-pub static HOST_SOCKET_DIR: &str = "/run/ndnd";
+// The host directories where the configuration and socket files will be stored
+// Subdirectories are created for each namespace
+pub static HOST_CONFIG_ROOT_DIR: &str = "/etc/ndnd";
+pub static HOST_SOCKET_ROOT_DIR: &str = "/run/ndnd";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -143,8 +145,12 @@ impl Network {
         format!("{}/{}", CONTAINER_SOCKET_DIR, self.socket_file_name())
     }
 
+    pub fn host_socket_dir(&self) -> String {
+        format!("{}/{}", HOST_SOCKET_ROOT_DIR, self.namespace().unwrap())
+    }
+
     pub fn host_socket_path(&self) -> String {
-        format!("{}/{}/{}", HOST_SOCKET_DIR, self.namespace().unwrap(), self.socket_file_name())
+        format!("{}/{}", self.host_socket_dir(), self.socket_file_name())
     }
 
     fn config_file_name(&self) -> String {
@@ -154,9 +160,13 @@ impl Network {
     pub fn container_config_path(&self) -> String {
         format!("{}/{}", CONTAINER_CONFIG_DIR, self.config_file_name())
     }
+    
+    pub fn host_config_dir(&self) -> String {
+        format!("{}/{}", HOST_CONFIG_ROOT_DIR, self.namespace().unwrap())
+    }
 
     pub fn host_config_path(&self) -> String {
-        format!("{}/{}/{}", HOST_CONFIG_DIR, self.namespace().unwrap(), self.config_file_name())
+        format!("{}/{}", self.host_config_dir(), self.config_file_name())
     }
 
     fn create_owned_sa(&self) -> ServiceAccount {
@@ -427,7 +437,7 @@ impl Network {
                             Volume {
                                 name: "config".to_string(),
                                 host_path: Some(HostPathVolumeSource {
-                                    path: HOST_CONFIG_DIR.to_string(),
+                                    path: self.host_config_dir(),
                                     type_: Some("DirectoryOrCreate".to_string())
                                 }),
                                 ..Volume::default()
@@ -435,7 +445,7 @@ impl Network {
                             Volume {
                                 name: "run-ndnd".to_string(),
                                 host_path: Some(HostPathVolumeSource {
-                                    path: HOST_SOCKET_DIR.to_string(),
+                                    path: self.host_socket_dir(),
                                     type_: Some("DirectoryOrCreate".to_string())
                                 }),
                                 ..Volume::default()
