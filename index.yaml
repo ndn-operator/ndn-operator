@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   ndn-operator:
   - apiVersion: v2
+    appVersion: 0.4.0
+    created: "2025-06-30T01:17:27.919626311Z"
+    description: A Helm chart for NDN Operator
+    digest: 4ad3b522116ca502330efed9dd39c017d0f482263443e25102e8d1eb664b5e59
+    name: ndn-operator
+    type: application
+    urls:
+    - https://github.com/ndn-operator/ndn-operator/releases/download/ndn-operator-0.4.0/ndn-operator-0.4.0.tgz
+    version: 0.4.0
+  - apiVersion: v2
     appVersion: 0.3.0
     created: "2025-06-29T22:12:39.518416239Z"
     description: A Helm chart for NDN Operator
@@ -73,6 +83,16 @@ entries:
     version: 0.1.0
   ndn-operator-crd:
   - apiVersion: v2
+    appVersion: 0.4.0
+    created: "2025-06-30T01:17:28.023523647Z"
+    description: A Helm chart for NDN Operator Custom Resource Definitions
+    digest: 968b0c6a039bcdab83ca01d01c00ae316790cd28d779148bcf9160d391c91194
+    name: ndn-operator-crd
+    type: application
+    urls:
+    - https://github.com/ndn-operator/ndn-operator/releases/download/ndn-operator-crd-0.4.0/ndn-operator-crd-0.4.0.tgz
+    version: 0.4.0
+  - apiVersion: v2
     appVersion: 0.3.0
     created: "2025-06-29T22:12:39.715804695Z"
     description: A Helm chart for NDN Operator Custom Resource Definitions
@@ -141,4 +161,4 @@ entries:
     urls:
     - https://github.com/ndn-operator/ndn-operator/releases/download/ndn-operator-crd-0.1.0/ndn-operator-crd-0.1.0.tgz
     version: 0.1.0
-generated: "2025-06-29T22:12:39.715885416Z"
+generated: "2025-06-30T01:17:28.023600892Z"
