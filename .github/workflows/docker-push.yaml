@@ -17,8 +17,42 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      sha_short: ${{ steps.sha_short.outputs.sha_short }}
+      version: ${{ steps.version_tag.outputs.version || steps.read_toml_version.outputs.value }}
+    permissions:
+      contents: read
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Dump GitHub context
+      env:
+        GITHUB_CONTEXT: ${{ toJson(github) }}
+      run: jq <<< "$GITHUB_CONTEXT"
+    - name: Get the version tag
+      id: version_tag
+      if: github.ref_type == 'tag'
+      env:
+        REF_NAME: "${{ github.ref_name }}"
+      run: |
+        echo "version=${REF_NAME#refs/tags/v}" >> $GITHUB_OUTPUT
+    - uses: SebRollen/toml-action@v1.2.0
+      if: github.ref_type == 'branch'
+      id: read_toml_version
+      with:
+        file: Cargo.toml
+        field: package.version
+    - name: Get the short version
+      id: sha_short
+      env:
+        FULL_SHA: "${{ github.sha }}"
+      run: |
+        echo "sha_short=$(git rev-parse --short $FULL_SHA)" >> $GITHUB_OUTPUT
   build-amd64:
     runs-on: ubuntu-24.04
+    needs: version
     permissions:
       contents: read
       packages: write
@@ -29,6 +63,13 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+    - name: Update Cargo.toml
+      uses: colathro/toml-editor@1.1.0
+      if: github.event_name == 'push'
+      with:
+        file: Cargo.toml
+        key: package.version
+        value: ${{ needs.version.outputs.version }}+${{ needs.version.outputs.sha_short }}
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
       with:
@@ -51,6 +92,8 @@ jobs:
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          TARGET=x86_64-unknown-linux-musl
         platforms: linux/amd64
         cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-cache
         cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-cache,mode=max
@@ -62,6 +105,7 @@ jobs:
         push-to-registry: true
   build-arm64:
     runs-on: ubuntu-24.04-arm
+    needs: version
     permissions:
       contents: read
       packages: write
@@ -72,6 +116,13 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+    - name: Update Cargo.toml
+      uses: colathro/toml-editor@1.1.0
+      if: github.event_name == 'push'
+      with:
+        file: Cargo.toml
+        key: package.version
+        value: ${{ needs.version.outputs.version }}+${{ needs.version.outputs.sha_short }}
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
       with:
@@ -94,6 +145,8 @@ jobs:
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          TARGET=aarch64-unknown-linux-musl
         platforms: linux/arm64
         cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-cache
         cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-cache,mode=max
@@ -110,6 +163,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       packages: write
+      attestations: write
+      id-token: write
     steps:
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
@@ -130,9 +185,16 @@ jobs:
           type=semver,pattern={{major}}
           type=sha
     - uses: int128/docker-manifest-create-action@v2
+      id: manifest
       with:
         index-annotations: ${{ steps.meta.outputs.labels }}
         tags: ${{ steps.meta.outputs.tags }}
         sources: |
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-amd64.outputs.digest }}
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-arm64.outputs.digest }}
+    - name: Generate artifact attestation
+      uses: actions/attest-build-provenance@v2
+      with:
+        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+        subject-digest: ${{ steps.manifest.outputs.digest }}
+        push-to-registry: true
