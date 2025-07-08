@@ -162,7 +162,7 @@ fn create_volume_mount() -> VolumeMount {
 fn create_env_var_transport() -> EnvVar {
     EnvVar {
         name: "NDN_CLIENT_TRANSPORT".to_string(),
-        value: Some(format!("unix://{}", MOUNT_PATH)),
+        value: Some(format!("unix://{MOUNT_PATH}")),
         ..EnvVar::default()
     }
 }
