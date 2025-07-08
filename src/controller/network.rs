@@ -420,7 +420,7 @@ impl Network {
                                 },
                                 EnvVar {
                                     name: "NDN_CLIENT_TRANSPORT".to_string(),
-                                    value: Some(format!("unix://{}", container_socket_path)),
+                                    value: Some(format!("unix://{container_socket_path}")),
                                     ..EnvVar::default()
                                 },
                             ]),

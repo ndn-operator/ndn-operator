@@ -1,20 +1,21 @@
-FROM rust:1.86.0-slim-bookworm AS builder
+FROM clux/muslrust:stable AS builder
+ARG TARGET
 
 WORKDIR /usr/src/app
 
 COPY src src
 COPY Cargo.toml Cargo.toml
 
-RUN cargo build --release
+RUN cargo build --target=${TARGET} --release
 
-FROM ghcr.io/named-data/ndnd:20250405 AS ndnd
+FROM ghcr.io/named-data/ndnd:latest AS ndnd
 
-FROM debian:bookworm-slim
-
-COPY --from=builder /usr/src/app/target/release/ndn-operator /
-COPY --from=builder /usr/src/app/target/release/init /
-COPY --from=builder /usr/src/app/target/release/sidecar /
-COPY --from=builder /usr/src/app/target/release/injector /
+FROM scratch
+ARG TARGET
+COPY --from=builder /usr/src/app/target/${TARGET}/release/ndn-operator /
+COPY --from=builder /usr/src/app/target/${TARGET}/release/init /
+COPY --from=builder /usr/src/app/target/${TARGET}/release/sidecar /
+COPY --from=builder /usr/src/app/target/${TARGET}/release/injector /
 COPY --from=ndnd /ndnd /
 
 CMD ["/ndn-operator"]

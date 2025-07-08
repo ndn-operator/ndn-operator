@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Patched router status: {:?}", patched.status);
     // Watch the neighbors in my_router's status and run `/ndnd dv link-create <URL>` or `/ndnd dv link-destroy <URL>` when it changes
     let wc = watcher::Config::default()
-        .fields(format!("metadata.name={}", my_router_name).as_str());
+        .fields(format!("metadata.name={my_router_name}").as_str());
     let mut neighbors = BTreeSet::<String>::new();
     let watcher = watcher(api_router, wc).applied_objects();
     pin_mut!(watcher);
