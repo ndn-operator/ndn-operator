@@ -43,6 +43,15 @@ pub struct NetworkSpec {
     pub udp_unicast_port: i32,
     pub node_selector: Option<BTreeMap<String, String>>,
     pub ndnd: Option<Ndnd>,
+    pub trust_anchors: Option<Vec<TrustAnchorRef>>,
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TrustAnchorRef {
+    pub name: String,
+    pub namespace: Option<String>,
 }
 
 #[skip_serializing_none]

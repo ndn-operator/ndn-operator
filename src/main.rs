@@ -1,5 +1,5 @@
 use actix_web::{get, middleware, web::Data, App, HttpRequest, HttpResponse, HttpServer, Responder};
-use operator::{self, telemetry, controller::{State, run_nw, run_router, run_pod_sync}};
+use operator::{self, telemetry, network_controller::{State, run_nw, run_router, run_pod_sync}};
 
 #[get("/health")]
 async fn health(_: HttpRequest) -> impl Responder {

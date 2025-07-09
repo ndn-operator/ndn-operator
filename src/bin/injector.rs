@@ -7,7 +7,7 @@ use kube::{
     },
     Client,
 };
-use operator::controller::Network;
+use operator::network_controller::Network;
 use std::{convert::Infallible, env, error::Error};
 use tracing::*;
 use warp::{reply, Filter, Reply};

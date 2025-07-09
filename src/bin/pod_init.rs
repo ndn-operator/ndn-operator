@@ -5,7 +5,7 @@ use kube::{
   Client,
 };
 use operator::{
-  controller::{
+  network_controller::{
     is_router_created, Router, RouterFaces, RouterStatus,
   },
   dv::RouterConfig,
