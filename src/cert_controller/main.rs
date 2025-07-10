@@ -16,7 +16,7 @@ use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
 use crate::{cert_controller::CERTIFICATE_FINALIZER, Error, Result};
-use super::NDNCertificate;
+use super::Certificate;
 
 
 // Context for our reconciler
@@ -30,9 +30,9 @@ pub struct Context {
     pub diagnostics: Arc<RwLock<Diagnostics>>,
 }
 
-async fn reconcile_cert(cert: Arc<NDNCertificate>, ctx: Arc<Context>) -> Result<Action> {
+async fn reconcile_cert(cert: Arc<Certificate>, ctx: Arc<Context>) -> Result<Action> {
     let ns = cert.namespace().unwrap();
-    let api_cert: Api<NDNCertificate> = Api::namespaced(ctx.client.clone(), &ns);
+    let api_cert: Api<Certificate> = Api::namespaced(ctx.client.clone(), &ns);
 
     info!("Reconciling Certificate \"{}\" in {}", cert.name_any(), ns);
     finalizer(&api_cert, CERTIFICATE_FINALIZER, cert, async |event| {
@@ -90,7 +90,7 @@ impl State {
     }
 }
 
-fn certificate_error_policy(_: Arc<NDNCertificate>, error: &Error, _: Arc<Context>) -> Action {
+fn certificate_error_policy(_: Arc<Certificate>, error: &Error, _: Arc<Context>) -> Action {
     warn!("reconcile failed: {:?}", error);
     Action::requeue(Duration::from_secs(5 * 60))
 }
@@ -98,7 +98,7 @@ fn certificate_error_policy(_: Arc<NDNCertificate>, error: &Error, _: Arc<Contex
 
 pub async fn run_cert(state: State) {
     let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
-    let api_cert = Api::<NDNCertificate>::all(client.clone());
+    let api_cert = Api::<Certificate>::all(client.clone());
     if let Err(e) = api_cert.list(&ListParams::default().limit(1)).await {
         error!("Certificate CRD is not queryable; {e:?}. Is the CRD installed?");
         info!("Installation: cargo run --bin crdgen | kubectl apply -f -");

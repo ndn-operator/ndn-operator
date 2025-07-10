@@ -1,0 +1,9 @@
+apiVersion: named-data.net/v1alpha1
+kind: Certificate
+metadata:
+  name: self-signed
+spec:
+  prefix: /test
+  issuer:
+    name: self-signed
+    kind: Certificate

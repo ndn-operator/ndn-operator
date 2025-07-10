@@ -1,7 +1,7 @@
 use kube::CustomResourceExt;
 use operator::{
   network_controller::{Network, Router},
-  cert_controller::NDNCertificate,
+  cert_controller::Certificate,
 };
 
 use clap::Parser;
@@ -18,5 +18,5 @@ fn main() {
     std::fs::create_dir_all(&args.output).unwrap();
     std::fs::write(format!("{}/network.yaml", args.output), serde_yaml::to_string(&Network::crd()).unwrap()).unwrap();
     std::fs::write(format!("{}/router.yaml", args.output), serde_yaml::to_string(&Router::crd()).unwrap()).unwrap();
-    std::fs::write(format!("{}/ndn_certificate.yaml", args.output), serde_yaml::to_string(&NDNCertificate::crd()).unwrap()).unwrap();
+    std::fs::write(format!("{}/certificate.yaml", args.output), serde_yaml::to_string(&Certificate::crd()).unwrap()).unwrap();
 }

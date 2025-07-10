@@ -1,14 +1,11 @@
-use std::{collections::BTreeMap, sync::Arc};
-use std::process::Command;
-use base64::prelude::*;
+use std::{collections::BTreeMap, sync::Arc, process::Command};
 use tempfile::NamedTempFile;
 use crate::{Error, Result};
 use super::Context;
 use chrono::{DateTime, Duration, Utc};
 use k8s_openapi::api::core::v1::Secret;
-use kube::api::PostParams;
 use kube::{
-    api::{Api, ObjectMeta, Patch, PatchParams, ResourceExt}, core::object::HasStatus, runtime::{
+    api::{Api, ObjectMeta, Patch, PatchParams, PostParams, ResourceExt}, core::object::HasStatus, runtime::{
         controller::Action,
         events::{Event, EventType},
     }, CustomResource, Resource
@@ -21,12 +18,13 @@ use tracing::*;
 
 pub static CERTIFICATE_FINALIZER: &str = "certificate.named-data.net/finalizer";
 pub static CERTIFICATE_MANAGER_NAME: &str = "cert-controller";
+const NDND_PATH: &str = "/usr/local/bin/ndnd";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[kube(group = "named-data.net", version = "v1alpha1", kind = "NDNCertificate", derive="Default", namespaced, shortname = "ndncert")]
-#[kube(status = "NDNCertificateStatus")]
-pub struct NDNCertificateSpec {
+#[kube(group = "named-data.net", version = "v1alpha1", kind = "Certificate", derive="Default", namespaced, shortname = "ndncert")]
+#[kube(status = "CertificateStatus")]
+pub struct CertificateSpec {
     pub prefix: String,
     pub issuer: IssuerRef,
 }
@@ -42,7 +40,7 @@ pub struct IssuerRef {
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct NDNCertificateStatus {
+pub struct CertificateStatus {
     pub key: KeyStatus,
     pub cert: CertStatus,
 }
@@ -62,23 +60,26 @@ pub struct CertStatus {
     pub name: Option<String>,
     pub sig_type: Option<String>,
     pub signer_key: Option<String>,
-    pub validity: Option<(String, String)>, // (start, end)
+    pub issued_at: Option<String>,
+    pub valid_until: Option<String>,
     pub secret: Option<String>,
     pub valid: bool,
 }
 
-impl NDNCertificate {
+impl Certificate {
     const SECRET_KEY: &str = "ndn.key";
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
-        debug!("Reconciling Certificate {:?}", self);
+        debug!("Reconciling Certificate {:?}", self.name_any());
         let ns = self.namespace().unwrap();
         let serverside = PatchParams::apply(CERTIFICATE_MANAGER_NAME);
-        let api_cert: Api<NDNCertificate> = Api::namespaced(ctx.client.clone(), self.namespace().as_ref().unwrap());
+        let api_cert: Api<Certificate> = Api::namespaced(ctx.client.clone(), self.namespace().as_ref().unwrap());
         let api_secret: Api<Secret> = Api::namespaced(ctx.client.clone(), &ns);
         let mut status = self.status().cloned().unwrap_or_default();
+
+        debug!("Current status: {:?}", status);
         
         if !status.key.created {
-            debug!("Generating key for Certificate {:?}", self);
+            debug!("Generating key for Certificate {:?}", self.name_any());
             let key_info = generate_key(&self.spec.prefix)?;
             // Create owned secret
             let api_secret: Api<Secret> = Api::namespaced(ctx.client.clone(), &ns);
@@ -90,13 +91,13 @@ impl NDNCertificate {
                 .map_err(Error::KubeError)?;
 
             // Publish an event for the created key
-            debug!("Created Key Secret: {:?}", secret);
+            debug!("Created Key Secret: {:?}", secret.name_any());
             ctx.recorder
                 .publish(
                     &Event {
                         type_: EventType::Normal,
                         reason: "KeyCreated".into(),
-                        note: Some(format!("Created `{}` Key for `{}` NDNCertificate", secret.name_any(), self.name_any())),
+                        note: Some(format!("Created `{}` Key for `{}` Certificate", secret.name_any(), self.name_any())),
                         action: "Created".into(),
                         secondary: None,
                     },
@@ -111,7 +112,7 @@ impl NDNCertificate {
             status.key.secret = Some(secret.name_any());
             status.key.created = true;
 
-            let patch = Patch::Apply(json!({
+            let patch = Patch::Merge(json!({
                 "status": status
             }));
 
@@ -119,14 +120,15 @@ impl NDNCertificate {
                 .map_err(Error::KubeError)?;
         };
         if !status.cert.valid {
-            debug!("Signing certificate for Certificate {:?}", self);
+            debug!("Signing certificate for Certificate {:?}", self.name_any());
             let issuer_ref = &self.spec.issuer;
             // Get the issuer resource
-            let key_secret_name = match issuer_ref.kind.as_str() {
-                "NDNCertificate" => {
-                    let api_issuer: Api<NDNCertificate> = Api::namespaced(ctx.client.clone(), issuer_ref.namespace.as_deref().unwrap_or(&ns));
+            let signer_key_secret_name = match issuer_ref.kind.as_str() {
+                "Certificate" => {
+                    let api_issuer: Api<Certificate> = Api::namespaced(ctx.client.clone(), issuer_ref.namespace.as_deref().unwrap_or(&ns));
                     let issuer = api_issuer.get_status(&issuer_ref.name).await.map_err(Error::KubeError)?;
                     let issuer_status = issuer.status.as_ref().ok_or_else(|| Error::OtherError("Issuer status not found".to_string()))?;
+                    debug!("Issuer Status: {:?}", issuer_status);
                     if !issuer_status.key.created {
                         return Err(Error::OtherError("Issuer key not created".to_string()));
                     }
@@ -137,15 +139,26 @@ impl NDNCertificate {
                 }
             };
 
-            let key_secret = api_secret.get(&key_secret_name).await.map_err(Error::KubeError)?;
-            let key_data_bytes = key_secret.data.as_ref().and_then(|d| d.get(Self::SECRET_KEY).cloned())
-                .ok_or_else(|| Error::OtherError("Key data not found in secret".to_string()))?;
+            let signer_key_secret = api_secret.get(&signer_key_secret_name).await.map_err(Error::KubeError)?;
+            let signer_key_secret_data = decode(&signer_key_secret);
+            let signer_key_data = signer_key_secret_data.get(Self::SECRET_KEY).ok_or_else(|| Error::OtherError("Key data not found".to_string()))?;
+            let signer_key_text = match signer_key_data {
+                Decoded::Utf8(s) => s.clone(),
+                Decoded::Bytes(_) => return Err(Error::OtherError("Key data is not UTF-8".to_string())),
+            };
 
-            let key_data = BASE64_STANDARD.decode(key_data_bytes.0)
-                .map_err(Error::DecodeError)?;
-            let key_text = String::from_utf8(key_data.clone()).map_err(Error::Utf8Error)?;
-            // Sign the certificate
-            let cert_info = sign_cert(&key_text, &self.spec.prefix, &SignCertParams {
+            let my_key_secret_name = self.status()
+                .and_then(|s| s.key.secret.as_ref())
+                .ok_or_else(|| Error::OtherError("Key secret not found in status".to_string()))?
+                .clone();
+            let my_key_secret = api_secret.get(&my_key_secret_name).await.map_err(Error::KubeError)?;
+            let my_key_secret_data = decode(&my_key_secret);
+            let my_key_data = my_key_secret_data.get(Self::SECRET_KEY).ok_or_else(|| Error::OtherError("Key data not found in my key secret".to_string()))?;
+            let my_key_text = match my_key_data {
+                Decoded::Utf8(s) => s.clone(),
+                Decoded::Bytes(_) => return Err(Error::OtherError("Key data is not UTF-8".to_string())),
+            };
+            let cert_info = sign_cert(&signer_key_text, &my_key_text, &SignCertParams {
                 start: Some(Utc::now()),
                 end: Some(Utc::now() + Duration::days(1)), // 24 hours from now
                 issuer: Some(self.spec.issuer.name.clone()),
@@ -161,13 +174,13 @@ impl NDNCertificate {
                 .map_err(Error::KubeError)?;
 
             // Publish an event for the created certificate
-            debug!("Created Certificate Secret: {:?}", cert_secret);
+            debug!("Created Certificate Secret: {:?}", cert_secret.name_any());
             ctx.recorder
                 .publish(
                     &Event {
                         type_: EventType::Normal,
                         reason: "CertCreated".into(),
-                        note: Some(format!("Created `{}` Cert for `{}` NDNCertificate", cert_secret.name_any(), self.name_any())),
+                        note: Some(format!("Created `{}` Cert for `{}` Certificate", cert_secret.name_any(), self.name_any())),
                         action: "Created".into(),
                         secondary: None,
                     },
@@ -180,11 +193,12 @@ impl NDNCertificate {
             status.cert.name = Some(cert_info.name);
             status.cert.sig_type = Some(cert_info.sig_type);
             status.cert.signer_key = Some(cert_info.signer_key);
-            status.cert.validity = Some((cert_info.validity.0.to_rfc3339(), cert_info.validity.1.to_rfc3339()));
+            status.cert.issued_at = Some(cert_info.validity.0.to_rfc3339());
+            status.cert.valid_until = Some(cert_info.validity.1.to_rfc3339());
             status.cert.secret = Some(cert_secret.name_any());
             status.cert.valid = true;
 
-            let patch = Patch::Apply(json!({
+            let patch = Patch::Merge(json!({
                 "status": status
             }));
 
@@ -195,7 +209,7 @@ impl NDNCertificate {
     }
 
     pub async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action> {
-        debug!("Cleaning up Certificate {:?}", self);
+        debug!("Cleaning up Certificate {:?}", self.name_any());
         let oref = self.object_ref(&());
         ctx.recorder
             .publish(
@@ -229,7 +243,7 @@ impl NDNCertificate {
 
 fn generate_key(prefix: &str) -> Result<KeyInfo, Error> {
     // Generate a new key
-    let output = Command::new("/ndnd")
+    let output = Command::new(NDND_PATH)
         .arg("sec")
         .arg("keygen")
         .arg(prefix)
@@ -324,13 +338,14 @@ fn sign_cert(signer_key: &str, cert_key: &str, params: &SignCertParams) -> Resul
         args.push("--info");
         args.push(info);
     }
-    args.push(temp_cert_key_file.path().to_str().unwrap());
+    debug!("Running ndnd sec sign-cert with args: {:?}", args);
     // cert_key goes to stdin
-    let output = Command::new("/ndnd")
+    let output = Command::new(NDND_PATH)
         .args(&args)
+        .stdin(std::fs::File::open(temp_cert_key_file.path()).map_err(Error::IoError)?)
         .output()
         .map_err(Error::IoError)?;
-
+    debug!("ndnd sec sign-cert output: {:?}", output);
     if !output.status.success() {
         return Err(Error::OtherError(format!(
             "ndnsec sign failed: {}",
@@ -365,6 +380,7 @@ impl CertInfo {
         let mut signer_key = None;
         let mut validity: (DateTime<Utc>, DateTime<Utc>) = (Utc::now(), Utc::now());
         let mut validity_str = None;
+        debug!("Parsing certificate text: {}", cert_text);
         for line in cert_text.lines() {
             if let Some((key, value)) = line.split_once(":") {
                 match key {
@@ -399,4 +415,27 @@ impl CertInfo {
         })
     }
     
+}
+
+enum Decoded {
+    /// Usually secrets are just short utf8 encoded strings
+    Utf8(String),
+    /// But it's allowed to just base64 encode binary in the values
+    #[allow(dead_code)]
+    Bytes(Vec<u8>),
+}
+
+fn decode(secret: &Secret) -> BTreeMap<String, Decoded> {
+    let mut res = BTreeMap::new();
+    // Ignoring binary data for now
+    if let Some(data) = secret.data.clone() {
+        for (k, v) in data {
+            if let Ok(b) = std::str::from_utf8(&v.0) {
+                res.insert(k, Decoded::Utf8(b.to_string()));
+            } else {
+                res.insert(k, Decoded::Bytes(v.0));
+            }
+        }
+    }
+    res
 }

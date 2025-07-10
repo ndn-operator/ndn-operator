@@ -36,6 +36,19 @@ spec:
                 type: object
               prefix:
                 type: string
+              trustAnchors:
+                items:
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      nullable: true
+                      type: string
+                  required:
+                  - name
+                  type: object
+                nullable: true
+                type: array
               udpUnicastPort:
                 format: int32
                 type: integer
