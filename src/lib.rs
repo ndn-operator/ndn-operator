@@ -11,9 +11,6 @@ pub enum Error {
     #[error("IO Error: {0}")]
     IoError(std::io::Error),
 
-    #[error("Decoding Error: {0}")]
-    DecodeError(#[source] base64::DecodeError),
-
     #[error("UTF-8 Error: {0}")]
     Utf8Error(#[source] std::string::FromUtf8Error),
 
