@@ -36,6 +36,12 @@ spec:
                 type: object
               prefix:
                 type: string
+              renewBefore:
+                nullable: true
+                type: string
+              renewInterval:
+                nullable: true
+                type: string
             required:
             - issuer
             - prefix
@@ -68,10 +74,10 @@ spec:
                 required:
                 - valid
                 type: object
+              certExists:
+                type: boolean
               key:
                 properties:
-                  created:
-                    type: boolean
                   name:
                     nullable: true
                     type: string
@@ -81,12 +87,17 @@ spec:
                   sigType:
                     nullable: true
                     type: string
-                required:
-                - created
                 type: object
+              keyExists:
+                type: boolean
+              needsRenewal:
+                type: boolean
             required:
             - cert
+            - certExists
             - key
+            - keyExists
+            - needsRenewal
             type: object
         required:
         - spec

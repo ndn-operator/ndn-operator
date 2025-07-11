@@ -7,3 +7,5 @@ spec:
   issuer:
     name: self-signed
     kind: Certificate
+  renewBefore: 23h50m
+  renewInterval: 4d15h

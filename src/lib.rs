@@ -14,6 +14,9 @@ pub enum Error {
     #[error("UTF-8 Error: {0}")]
     Utf8Error(#[source] std::string::FromUtf8Error),
 
+    #[error("Parse Error: {0}")]
+    ParseError(#[source] chrono::ParseError),
+
     #[error("Finalizer Error: {0}")]
     // NB: awkward type because finalizer::Error embeds the reconciler error (which is this)
     // so boxing this error to break cycles

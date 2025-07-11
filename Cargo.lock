@@ -701,6 +701,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "duration-string"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04782251e09dc67c90d694d89e9a3e5fc6cfe883df1b203202de672d812fb299"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "dyn-clone"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1766,6 +1775,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "duration-string",
  "futures",
  "json-patch",
  "k8s-openapi",

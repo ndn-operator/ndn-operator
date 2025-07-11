@@ -1,8 +1,10 @@
-use std::{collections::BTreeMap, sync::Arc, process::Command};
+use std::{collections::BTreeMap, process::Command, sync::Arc};
+use duration_string::DurationString;
 use tempfile::NamedTempFile;
 use crate::{Error, Result};
 use super::Context;
 use chrono::{DateTime, Duration, Utc};
+use std::time::Duration as StdDuration;
 use k8s_openapi::api::core::v1::Secret;
 use kube::{
     api::{Api, ObjectMeta, Patch, PatchParams, PostParams, ResourceExt}, core::object::HasStatus, runtime::{
@@ -27,6 +29,10 @@ const NDND_PATH: &str = "/usr/local/bin/ndnd";
 pub struct CertificateSpec {
     pub prefix: String,
     pub issuer: IssuerRef,
+    #[schemars(with = "Option<String>")]
+    pub renew_before: Option<DurationString>,
+    #[schemars(with = "Option<String>")]
+    pub renew_interval: Option<DurationString>,
 }
 
 #[skip_serializing_none]
@@ -43,6 +49,9 @@ pub struct IssuerRef {
 pub struct CertificateStatus {
     pub key: KeyStatus,
     pub cert: CertStatus,
+    pub key_exists: bool,
+    pub cert_exists: bool,
+    pub needs_renewal: bool,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
@@ -51,7 +60,6 @@ pub struct KeyStatus {
     pub name: Option<String>,
     pub sig_type: Option<String>,
     pub secret: Option<String>,
-    pub created: bool,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
@@ -68,144 +76,213 @@ pub struct CertStatus {
 
 impl Certificate {
     const SECRET_KEY: &str = "ndn.key";
+
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
         debug!("Reconciling Certificate {:?}", self.name_any());
         let ns = self.namespace().unwrap();
-        let serverside = PatchParams::apply(CERTIFICATE_MANAGER_NAME);
         let api_cert: Api<Certificate> = Api::namespaced(ctx.client.clone(), self.namespace().as_ref().unwrap());
         let api_secret: Api<Secret> = Api::namespaced(ctx.client.clone(), &ns);
-        let mut status = self.status().cloned().unwrap_or_default();
-
-        debug!("Current status: {:?}", status);
+        let status = self.status().cloned().unwrap_or_default();
         
-        if !status.key.created {
-            debug!("Generating key for Certificate {:?}", self.name_any());
-            let key_info = generate_key(&self.spec.prefix)?;
-            // Create owned secret
-            let api_secret: Api<Secret> = Api::namespaced(ctx.client.clone(), &ns);
-            let secret_name = format!("{}-key", self.name_any());
-            let secret_data = self.create_owned_secret(secret_name.clone(), &BTreeMap::from([
-                (Self::SECRET_KEY.to_string(), key_info.key_text),
-            ]));
-            let secret = api_secret.create(&PostParams::default(), &secret_data).await
-                .map_err(Error::KubeError)?;
-
-            // Publish an event for the created key
-            debug!("Created Key Secret: {:?}", secret.name_any());
-            ctx.recorder
-                .publish(
-                    &Event {
-                        type_: EventType::Normal,
-                        reason: "KeyCreated".into(),
-                        note: Some(format!("Created `{}` Key for `{}` Certificate", secret.name_any(), self.name_any())),
-                        action: "Created".into(),
-                        secondary: None,
+        let new_status = match status.key_exists{
+            true => {
+                debug!("Key is already created for Certificate {:?}", self.name_any());
+                match status.cert_exists {
+                    true => {
+                        debug!("Cert is already created for Certificate {:?}", self.name_any());
+                        match status.needs_renewal {
+                            true => {
+                                debug!("Cert needs renewal for Certificate {:?}", self.name_any());
+                                self.create_cert(ctx, &ns, &status, &api_secret).await?
+                            },
+                            false => {
+                                debug!("Cert does not need renewal for Certificate {:?}", self.name_any());
+                                self.validate_cert(&status)?
+                            }
+                        }
                     },
-                    &self.object_ref(&()),
-                )
-                .await
-                .map_err(Error::KubeError)?;
-
-            // Patch the status with the key information
-            status.key.name = Some(key_info.name);
-            status.key.sig_type = Some(key_info.sig_type);
-            status.key.secret = Some(secret.name_any());
-            status.key.created = true;
-
-            let patch = Patch::Merge(json!({
-                "status": status
-            }));
-
-            api_cert.patch_status(self.name_any().as_str(), &serverside, &patch).await
-                .map_err(Error::KubeError)?;
-        };
-        if !status.cert.valid {
-            debug!("Signing certificate for Certificate {:?}", self.name_any());
-            let issuer_ref = &self.spec.issuer;
-            // Get the issuer resource
-            let signer_key_secret_name = match issuer_ref.kind.as_str() {
-                "Certificate" => {
-                    let api_issuer: Api<Certificate> = Api::namespaced(ctx.client.clone(), issuer_ref.namespace.as_deref().unwrap_or(&ns));
-                    let issuer = api_issuer.get_status(&issuer_ref.name).await.map_err(Error::KubeError)?;
-                    let issuer_status = issuer.status.as_ref().ok_or_else(|| Error::OtherError("Issuer status not found".to_string()))?;
-                    debug!("Issuer Status: {:?}", issuer_status);
-                    if !issuer_status.key.created {
-                        return Err(Error::OtherError("Issuer key not created".to_string()));
+                    false => {
+                        debug!("Cert is not created for Certificate {:?}", self.name_any());
+                        self.create_cert(ctx, &ns, &status, &api_secret).await?
                     }
-                    issuer_status.key.secret.as_ref().ok_or_else(|| Error::OtherError("Key secret not found".to_string()))?.clone()
-                },
-                _ => {
-                    return Err(Error::OtherError(format!("Unsupported issuer kind: {}", issuer_ref.kind)));
                 }
-            };
-
-            let signer_key_secret = api_secret.get(&signer_key_secret_name).await.map_err(Error::KubeError)?;
-            let signer_key_secret_data = decode(&signer_key_secret);
-            let signer_key_data = signer_key_secret_data.get(Self::SECRET_KEY).ok_or_else(|| Error::OtherError("Key data not found".to_string()))?;
-            let signer_key_text = match signer_key_data {
-                Decoded::Utf8(s) => s.clone(),
-                Decoded::Bytes(_) => return Err(Error::OtherError("Key data is not UTF-8".to_string())),
-            };
-
-            let my_key_secret_name = self.status()
-                .and_then(|s| s.key.secret.as_ref())
-                .ok_or_else(|| Error::OtherError("Key secret not found in status".to_string()))?
-                .clone();
-            let my_key_secret = api_secret.get(&my_key_secret_name).await.map_err(Error::KubeError)?;
-            let my_key_secret_data = decode(&my_key_secret);
-            let my_key_data = my_key_secret_data.get(Self::SECRET_KEY).ok_or_else(|| Error::OtherError("Key data not found in my key secret".to_string()))?;
-            let my_key_text = match my_key_data {
-                Decoded::Utf8(s) => s.clone(),
-                Decoded::Bytes(_) => return Err(Error::OtherError("Key data is not UTF-8".to_string())),
-            };
-            let cert_info = sign_cert(&signer_key_text, &my_key_text, &SignCertParams {
-                start: Some(Utc::now()),
-                end: Some(Utc::now() + Duration::days(1)), // 24 hours from now
-                issuer: Some(self.spec.issuer.name.clone()),
-                info: None,
-            })?;
-
-            // Create owned secret for the certificate
-            let cert_secret_name = format!("{}-cert", self.name_any());
-            let cert_data = self.create_owned_secret(cert_secret_name.clone(), &BTreeMap::from([
-                ("ndn.cert".to_string(), cert_info.cert_text),
-            ]));
-            let cert_secret = api_secret.create(&PostParams::default(), &cert_data).await
-                .map_err(Error::KubeError)?;
-
-            // Publish an event for the created certificate
-            debug!("Created Certificate Secret: {:?}", cert_secret.name_any());
-            ctx.recorder
-                .publish(
-                    &Event {
-                        type_: EventType::Normal,
-                        reason: "CertCreated".into(),
-                        note: Some(format!("Created `{}` Cert for `{}` Certificate", cert_secret.name_any(), self.name_any())),
-                        action: "Created".into(),
-                        secondary: None,
-                    },
-                    &self.object_ref(&()),
-                )
-                .await
-                .map_err(Error::KubeError)?;
-
-            // Patch the status with the certificate information
-            status.cert.name = Some(cert_info.name);
-            status.cert.sig_type = Some(cert_info.sig_type);
-            status.cert.signer_key = Some(cert_info.signer_key);
-            status.cert.issued_at = Some(cert_info.validity.0.to_rfc3339());
-            status.cert.valid_until = Some(cert_info.validity.1.to_rfc3339());
-            status.cert.secret = Some(cert_secret.name_any());
-            status.cert.valid = true;
-
-            let patch = Patch::Merge(json!({
-                "status": status
-            }));
-
-            api_cert.patch_status(self.name_any().as_str(), &serverside, &patch).await
-                .map_err(Error::KubeError)?;
+            },
+            false => {
+                debug!("Key is not created for Certificate {:?}", self.name_any());
+                self.create_key(ctx, &status, &api_secret).await?
+            }
         };
+        
+        let serverside = PatchParams::apply(CERTIFICATE_MANAGER_NAME);
+        let patch = Patch::Merge(json!({
+            "status": new_status
+        }));
+        api_cert.patch_status(self.name_any().as_str(), &serverside, &patch).await
+            .map_err(Error::KubeError)?;
+    
         Ok(Action::await_change())
+    }
+
+    fn valid_until(&self, status: &CertificateStatus) -> Result<DateTime<Utc>> {
+        if let Some(valid_until) = &status.cert.valid_until {
+            Ok(DateTime::parse_from_rfc3339(valid_until)
+                .map_err(Error::ParseError)?
+                .with_timezone(&Utc))
+        } else {
+            Err(Error::MissingAnnotation("validUntil".into()))
+        }
+    }
+
+    fn renew_before(&self, status: &CertificateStatus) -> Result<DateTime<Utc>> {
+        let renew_before: StdDuration = self.spec.renew_before
+            .unwrap_or(DurationString::new(StdDuration::from_secs(60 * 60 * 24 * 7))) // Default to 7 days
+            .into();
+        Ok(self.valid_until(status)? - Duration::from_std(renew_before).map_err(|e| Error::OtherError(e.to_string()))?)
+    }
+
+    fn validate_cert(&self, status: &CertificateStatus) -> Result<CertificateStatus> {
+        // Validate the certificate status
+        let mut new_status = status.clone();
+        let valid_until = self.valid_until(&status)?;
+        let now = Utc::now();
+        debug!("Cert is valid until: {}", valid_until);
+        new_status.cert.valid = valid_until > now;
+
+        let renew_before = self.renew_before(&status)?;
+        debug!("Cert should be renewed before: {}", renew_before);
+        new_status.needs_renewal = renew_before <= now;
+        Ok(new_status)
+    }
+
+    async fn create_cert(
+        &self,
+        ctx: Arc<Context>,
+        ns: &str,
+        status: &CertificateStatus,
+        api_secret: &Api<Secret>,
+    ) -> Result<CertificateStatus> {
+        debug!("Creating cert for Certificate {:?}", self.name_any());
+        let mut new_status = status.clone();
+        let issuer_ref = &self.spec.issuer;
+        // Get the issuer resource
+        let signer_key_secret_name = match issuer_ref.kind.as_str() {
+            "Certificate" => {
+                let api_issuer: Api<Certificate> = Api::namespaced(ctx.client.clone(), issuer_ref.namespace.as_deref().unwrap_or(&ns));
+                let issuer = api_issuer.get_status(&issuer_ref.name).await.map_err(Error::KubeError)?;
+                let issuer_status = issuer.status.as_ref().ok_or(Error::OtherError("Issuer status not found".to_string()))?;
+                debug!("Issuer Status: {:?}", issuer_status);
+                if !issuer_status.key_exists {
+                    return Err(Error::OtherError("Issuer key not found".to_string()));
+                }
+                issuer_status.key.secret.as_ref().ok_or(Error::OtherError("Key secret not found".to_string()))?.clone()
+            },
+            _ => {
+                return Err(Error::OtherError(format!("Unsupported issuer kind: {}", issuer_ref.kind)));
+            }
+        };
+
+        let signer_key_secret = api_secret.get(&signer_key_secret_name).await.map_err(Error::KubeError)?;
+        let signer_key_secret_data = decode(&signer_key_secret);
+        let signer_key_data = signer_key_secret_data.get(Self::SECRET_KEY).ok_or( Error::OtherError("Key data not found".to_string()))?;
+        let signer_key_text = match signer_key_data {
+            Decoded::Utf8(s) => s.clone(),
+            Decoded::Bytes(_) => return Err(Error::OtherError("Key data is not UTF-8".to_string())),
+        };
+
+        let my_key_secret_name = status.key.secret.clone().ok_or(Error::OtherError("Key secret not found".to_string()))?;
+        let my_key_secret = api_secret.get(&my_key_secret_name).await.map_err(Error::KubeError)?;
+        let my_key_secret_data = decode(&my_key_secret);
+        let my_key_data = my_key_secret_data.get(Self::SECRET_KEY).ok_or(Error::OtherError("Key data not found in my key secret".to_string()))?;
+        let my_key_text = match my_key_data {
+            Decoded::Utf8(s) => s.clone(),
+            Decoded::Bytes(_) => return Err(Error::OtherError("Key data is not UTF-8".to_string())),
+        };
+        let std_duration: StdDuration = self.spec.renew_interval
+            .unwrap_or(DurationString::new(StdDuration::from_secs(60 * 60 * 24 * 30))).into(); // Default to 30 days
+        let cert_info = sign_cert(&signer_key_text, &my_key_text, &SignCertParams {
+            start: Some(Utc::now()),
+            end: Some(Utc::now() + Duration::from_std(std_duration).unwrap_or_default()),
+            issuer: Some(self.spec.issuer.name.clone()),
+            info: None,
+        })?;
+
+        // Create owned secret for the certificate
+        let cert_secret_name = format!("{}-cert", self.name_any());
+        let cert_data = self.create_owned_secret(cert_secret_name.clone(), &BTreeMap::from([
+            ("ndn.cert".to_string(), cert_info.cert_text),
+        ]));
+        let serverside = PatchParams::apply(CERTIFICATE_MANAGER_NAME);
+        let cert_secret = api_secret.patch(&cert_secret_name, &serverside, &Patch::Apply(cert_data)).await
+            .map_err(Error::KubeError)?;
+
+        // Publish an event for the created certificate
+        debug!("Patched Cert Secret: {:?}", cert_secret.name_any());
+        ctx.recorder
+            .publish(
+                &Event {
+                    type_: EventType::Normal,
+                    reason: "CertCreated".into(),
+                    note: Some(format!("Created `{}` Cert for `{}` Certificate", cert_secret.name_any(), self.name_any())),
+                    action: "Created".into(),
+                    secondary: None,
+                },
+                &self.object_ref(&()),
+            )
+            .await
+            .map_err(Error::KubeError)?;
+
+        // Patch the status with the certificate information
+        new_status.cert.name = Some(cert_info.name);
+        new_status.cert.sig_type = Some(cert_info.sig_type);
+        new_status.cert.signer_key = Some(cert_info.signer_key);
+        new_status.cert.issued_at = Some(cert_info.validity.0.to_rfc3339());
+        new_status.cert.valid_until = Some(cert_info.validity.1.to_rfc3339());
+        new_status.cert.secret = Some(cert_secret.name_any());
+        new_status.cert.valid = true;
+        new_status.cert_exists = true;
+        Ok(new_status)
+    }
+
+    async fn create_key(
+        &self,
+        ctx: Arc<Context>,
+        status: &CertificateStatus,
+        api_secret: &Api<Secret>,
+    ) -> Result<CertificateStatus> {
+        debug!("Creating key for Certificate {:?}", self.name_any());
+        let key_info = generate_key(&self.spec.prefix)?;
+        // Create owned secret for the key
+        let secret_name = format!("{}-key", self.name_any());
+        let secret_data = self.create_owned_secret(secret_name.clone(), &BTreeMap::from([
+            (Self::SECRET_KEY.to_string(), key_info.key_text),
+        ]));
+        let secret = api_secret.create(&PostParams::default(), &secret_data).await
+            .map_err(Error::KubeError)?;
+
+        // Publish an event for the created key
+        debug!("Created Key Secret: {:?}", secret.name_any());
+        ctx.recorder
+            .publish(
+                &Event {
+                    type_: EventType::Normal,
+                    reason: "KeyCreated".into(),
+                    note: Some(format!("Created `{}` Key for `{}` Certificate", secret.name_any(), self.name_any())),
+                    action: "Created".into(),
+                    secondary: None,
+                },
+                &self.object_ref(&()),
+            )
+            .await
+            .map_err(Error::KubeError)?;
+
+        // Patch the status with the key information
+        let mut new_status = status.clone();
+        new_status.key.name = Some(key_info.name);
+        new_status.key.sig_type = Some(key_info.sig_type);
+        new_status.key.secret = Some(secret.name_any());
+        new_status.key_exists = true;
+        
+        Ok(new_status)
     }
 
     pub async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action> {
