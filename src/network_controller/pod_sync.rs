@@ -3,9 +3,7 @@ use std::sync::Arc;
 use crate::{cert_controller::Certificate, Error, Result};
 use k8s_openapi::api::core::v1::Pod;
 use kube::{
-    api::{DeleteParams, Patch, PatchParams},
-    runtime::controller::Action,
-    ResourceExt,
+    api::{DeleteParams, Patch, PatchParams}, runtime::controller::Action, Api, ResourceExt
 };
 use tracing::*;
 
@@ -64,15 +62,39 @@ pub async fn pod_cleanup(pod: Arc<Pod>, ctx: Context) -> Result<Action> {
     // Delete the router for the pod
     let client = ctx.client.clone();
     let ns = pod.namespace().unwrap();
-    let api_rt = kube::Api::<Router>::namespaced(client.clone(), &ns);
+    let api_rt = Api::<Router>::namespaced(client.clone(), &ns);
     let pod_name = pod.name_any();
     let router_name = pod_name.clone();
+
+    let router = api_rt
+        .get(&router_name)
+        .await
+        .map_err(Error::KubeError)?;
+    let cert_ref = router
+        .spec
+        .cert;
     let dp = DeleteParams::default();
     info!("Deleting router for pod {}", pod_name);
     let _ = api_rt
-      .delete(&router_name, &dp)
-      .await
-      .map_err(Error::KubeError);
+        .delete(&router_name, &dp)
+        .await
+        .map_err(Error::KubeError);
+
+    match cert_ref {
+        Some(cert_ref) => {
+            let cert_ns = cert_ref.namespace.as_deref().unwrap_or(&ns);
+            let api_cert = Api::<Certificate>::namespaced(client.clone(), cert_ns);
+            info!("Deleting certificate {} for router {}", cert_ref.name, router_name);
+            let _ = api_cert
+                .delete(&cert_ref.name, &dp)
+                .await
+                .map_err(Error::KubeError);
+        }
+        None => {
+            info!("No certificate to delete for router {}", router_name);
+        }
+    }
+
 
     Ok(Action::await_change())
 }
