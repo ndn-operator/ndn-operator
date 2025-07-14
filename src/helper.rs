@@ -1,4 +1,6 @@
-use k8s_openapi::api::core::v1::Pod;
+use std::collections::BTreeMap;
+
+use k8s_openapi::api::core::v1::{Pod, Secret};
 use kube::{Api, Client};
 use crate::{Result, Error};
 
@@ -18,4 +20,26 @@ pub async fn get_my_pod(client: Client) -> Result<Pod> {
     let pod_name_raw = get_my_pod_name()?;
     let pod_name = pod_name_raw.trim_end_matches('\n');
     api_pods.get(pod_name).await.map_err(Error::KubeError)
+}
+
+pub enum Decoded {
+    /// Usually secrets are just short utf8 encoded strings
+    Utf8(String),
+    /// But it's allowed to just base64 encode binary in the values
+    Bytes(Vec<u8>),
+}
+
+pub fn decode_secret(secret: &Secret) -> BTreeMap<String, Decoded> {
+    let mut res = BTreeMap::new();
+    // Ignoring binary data for now
+    if let Some(data) = secret.data.clone() {
+        for (k, v) in data {
+            if let Ok(b) = std::str::from_utf8(&v.0) {
+                res.insert(k, Decoded::Utf8(b.to_string()));
+            } else {
+                res.insert(k, Decoded::Bytes(v.0));
+            }
+        }
+    }
+    res
 }

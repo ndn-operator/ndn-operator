@@ -1,5 +1,5 @@
-use super::{get_my_pod, Context};
-use crate::{Error, Result};
+use super::Context;
+use crate::{cert_controller::{Certificate, CertificateSpec, IssuerRef}, helper::get_my_pod, network_controller::{CertificateRef, Router, RouterSpec}, Error, Result};
 use k8s_openapi::{
     api::{
         apps::v1::{DaemonSet, DaemonSetSpec},
@@ -29,10 +29,12 @@ pub static NETWORK_LABEL_KEY: &str = "network.named-data.net/name";
 pub static DS_LABEL_KEY : &str = "network.named-data.net/managed-by";
 pub static CONTAINER_CONFIG_DIR: &str = "/etc/ndnd";
 pub static CONTAINER_SOCKET_DIR: &str = "/run/ndnd";
+pub static CONTAINER_KEYS_DIR: &str = "/etc/ndn/keys";
 // The host directories where the configuration and socket files will be stored
 // Subdirectories are created for each namespace
 pub static HOST_CONFIG_ROOT_DIR: &str = "/etc/ndnd";
 pub static HOST_SOCKET_ROOT_DIR: &str = "/run/ndnd";
+pub static HOST_KEYS_ROOT_DIR: &str = "/etc/ndn/keys";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -43,6 +45,7 @@ pub struct NetworkSpec {
     pub udp_unicast_port: i32,
     pub node_selector: Option<BTreeMap<String, String>>,
     pub ndnd: Option<Ndnd>,
+    pub router_cert_issuer: Option<IssuerRef>,
     pub trust_anchors: Option<Vec<TrustAnchorRef>>,
 }
 
@@ -51,6 +54,7 @@ pub struct NetworkSpec {
 #[serde(rename_all = "camelCase")]
 pub struct TrustAnchorRef {
     pub name: String,
+    pub kind: String,
     pub namespace: Option<String>,
 }
 
@@ -94,7 +98,7 @@ impl Network {
         let sa_data = self.create_owned_sa();
         let role_date = self.create_owned_role();
         let role_binding_data = self.create_owned_role_binding(sa_data.name_any(), role_date.name_any());
-        let ds_data = self.create_owned_daemonset(my_image, Some(sa_data.name_any()));
+        let ds_data = self.create_owned_daemonset(my_image, Some(sa_data.name_any()))?;
         // Create ServiceAccount
         let _sa = api_sa.patch(&self.name_any(), &serverside, &Patch::Apply(sa_data)).await.map_err(Error::KubeError)?;
         let _role = api_role.patch(&self.name_any(), &serverside, &Patch::Apply(role_date)).await.map_err(Error::KubeError)?;
@@ -153,6 +157,18 @@ impl Network {
     pub fn container_socket_path(&self) -> String {
         format!("{}/{}", CONTAINER_SOCKET_DIR, self.socket_file_name())
     }
+    
+    fn config_file_name(&self) -> String {
+        format!("{}.yml", self.name_any())
+    }
+    
+    pub fn container_config_path(&self) -> String {
+        format!("{}/{}", CONTAINER_CONFIG_DIR, self.config_file_name())
+    }
+
+    pub fn container_keys_dir(&self) -> String {
+        CONTAINER_KEYS_DIR.to_string()
+    }
 
     pub fn host_socket_dir(&self) -> String {
         format!("{}/{}", HOST_SOCKET_ROOT_DIR, self.namespace().unwrap())
@@ -160,14 +176,6 @@ impl Network {
 
     pub fn host_socket_path(&self) -> String {
         format!("{}/{}", self.host_socket_dir(), self.socket_file_name())
-    }
-
-    fn config_file_name(&self) -> String {
-        format!("{}.yml", self.name_any())
-    }
-
-    pub fn container_config_path(&self) -> String {
-        format!("{}/{}", CONTAINER_CONFIG_DIR, self.config_file_name())
     }
     
     pub fn host_config_dir(&self) -> String {
@@ -178,6 +186,10 @@ impl Network {
         format!("{}/{}", self.host_config_dir(), self.config_file_name())
     }
 
+    pub fn host_keys_dir(&self) -> String {
+        format!("{}/{}", HOST_KEYS_ROOT_DIR, self.namespace().unwrap())
+    }
+    
     fn create_owned_sa(&self) -> ServiceAccount {
         let oref = self.controller_owner_ref(&()).unwrap();
         ServiceAccount {
@@ -248,13 +260,14 @@ impl Network {
         }
     }
 
-    fn create_owned_daemonset(&self, image: Option<String>, service_account: Option<String>) -> DaemonSet {
-        let oref = self.controller_owner_ref(&()).unwrap();
+    fn create_owned_daemonset(&self, image: Option<String>, service_account: Option<String>) -> Result<DaemonSet> {
+        let oref = self.controller_owner_ref(&())
+            .ok_or(Error::OtherError("Failed to create owner reference".to_string()))?;
         let mut labels = BTreeMap::new();
         labels.insert(DS_LABEL_KEY.to_string(), self.name_any());
         let container_config_path = self.container_config_path();
         let container_socket_path = self.container_socket_path();
-        DaemonSet {
+        let daemonset = DaemonSet {
             metadata: ObjectMeta {
                 name: Some(self.name_any()),
                 owner_references: Some(vec![oref]),
@@ -308,7 +321,8 @@ impl Network {
                                     ..EnvVar::default()
                                 },
                                 EnvVar {
-                                    // Router name is equal to the pod name
+                                    // Router name is equal to the pod name (pod_sync.rs#pod_apply)
+                                    // TODO: use annotations?
                                     name: "NDN_ROUTER_NAME".to_string(),
                                     value_from: Some(EnvVarSource {
                                         field_ref: Some(ObjectFieldSelector {
@@ -335,6 +349,19 @@ impl Network {
                                     value: Some(container_socket_path.clone()),
                                     ..EnvVar::default()
                                 },
+                                EnvVar {
+                                    name: "NDN_KEYS_DIR".to_string(),
+                                    value: Some(self.container_keys_dir()),
+                                ..EnvVar::default()
+                                },
+                                EnvVar {
+                                    name: "NDN_INSECURE".to_string(),
+                                    value: match self.spec.router_cert_issuer {
+                                        Some(_) => Some("false".to_string()),
+                                        None => Some("true".to_string()),
+                                    },
+                                    ..EnvVar::default()
+                                },
                             ]),
                             security_context: Some(SecurityContext {
                                 privileged: Some(true),
@@ -344,6 +371,12 @@ impl Network {
                                 VolumeMount {
                                     name: "config".to_string(),
                                     mount_path: CONTAINER_CONFIG_DIR.to_string(),
+                                    read_only: Some(false),
+                                    ..VolumeMount::default()
+                                },
+                                VolumeMount {
+                                    name: "keys".to_string(),
+                                    mount_path: CONTAINER_KEYS_DIR.to_string(),
                                     read_only: Some(false),
                                     ..VolumeMount::default()
                                 },
@@ -386,6 +419,12 @@ impl Network {
                                     mount_path: CONTAINER_SOCKET_DIR.to_string(),
                                     ..VolumeMount::default()
                                 },
+                                VolumeMount {
+                                    name: "keys".to_string(),
+                                    mount_path: CONTAINER_KEYS_DIR.to_string(),
+                                    read_only: Some(true),
+                                    ..VolumeMount::default()
+                                },
                             ]),
                             ..Container::default()
                         },
@@ -416,7 +455,7 @@ impl Network {
                                     ..EnvVar::default()
                                 },
                                 EnvVar {
-                                    // Router name is equal to the pod name
+                                    // Router name is equal to the pod name (pod_sync.rs#pod_apply)
                                     name: "NDN_ROUTER_NAME".to_string(),
                                     value_from: Some(EnvVarSource {
                                         field_ref: Some(ObjectFieldSelector {
@@ -459,6 +498,14 @@ impl Network {
                                 }),
                                 ..Volume::default()
                             },
+                            Volume {
+                                name: "keys".to_string(),
+                                host_path: Some(HostPathVolumeSource {
+                                    path: self.host_keys_dir(),
+                                    type_: Some("DirectoryOrCreate".to_string())
+                                }),
+                                ..Volume::default()
+                            },
                         ]),
                         ..PodSpec::default()
                     }),
@@ -467,7 +514,63 @@ impl Network {
                 
             }),
             ..Default::default()
-        }
+        };
+        Ok(daemonset)
+    }
+
+    pub fn create_owned_router(&self, name: &String, node_name: &String, cert: Option<Certificate>) -> Result<Router> {
+        let oref = self.controller_owner_ref(&())
+            .ok_or(Error::OtherError("Failed to create owner reference".to_string()))?;
+        let router = Router {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                namespace: self.namespace(),
+                owner_references: Some(vec![oref]),
+                labels: {
+                    let mut labels = self.labels().clone();
+                    labels.extend(BTreeMap::from([(NETWORK_LABEL_KEY.to_string(), self.name_any())]));
+                    Some(labels)
+                },
+                annotations: Some(self.annotations().clone()),
+                ..ObjectMeta::default()
+            },
+            spec: RouterSpec {
+                prefix: self.spec.prefix.clone(),
+                node_name: node_name.to_string(),
+                cert: cert.map(|c| CertificateRef {
+                    name: c.metadata.name.unwrap_or_default(),
+                    namespace: c.metadata.namespace,
+                }),
+            },
+            status: None,
+        };
+        Ok(router)
+    }
+
+    pub fn create_owned_certificate(&self, name: &str, cert_issuer: &IssuerRef) -> Result<Certificate> {
+        let oref = self.controller_owner_ref(&())
+            .ok_or(Error::OtherError("Failed to create owner reference for certificate".to_string()))?;
+        let cert = Certificate {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                namespace: self.namespace(),
+                owner_references: Some(vec![oref]),
+                labels: {
+                    let mut labels = self.labels().clone();
+                    labels.extend(BTreeMap::from([(NETWORK_LABEL_KEY.to_string(), self.name_any())]));
+                    Some(labels)
+                },
+                annotations: Some(self.annotations().clone()),
+                ..ObjectMeta::default()
+            },
+            spec: CertificateSpec {
+                prefix: self.spec.prefix.clone(),
+                issuer: cert_issuer.clone(),
+                ..CertificateSpec::default()
+            },
+            ..Certificate::default()
+        };
+        Ok(cert)
     }
 }
 

@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, process::Command, sync::Arc};
 use duration_string::DurationString;
 use tempfile::NamedTempFile;
-use crate::{Error, Result};
+use crate::{helper::{decode_secret, Decoded}, Error, Result};
 use super::Context;
 use chrono::{DateTime, Duration, Utc};
 use std::time::Duration as StdDuration;
@@ -9,7 +9,7 @@ use k8s_openapi::api::core::v1::Secret;
 use kube::{
     api::{Api, ObjectMeta, Patch, PatchParams, PostParams, ResourceExt}, core::object::HasStatus, runtime::{
         controller::Action,
-        events::{Event, EventType},
+        events::{Event, EventType}, wait::Condition,
     }, CustomResource, Resource
 };
 use schemars::JsonSchema;
@@ -75,7 +75,8 @@ pub struct CertStatus {
 }
 
 impl Certificate {
-    const SECRET_KEY: &str = "ndn.key";
+    pub const SECRET_KEY: &str = "ndn.key";
+    pub const CERT_KEY: &str = "ndn.cert";
 
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
         debug!("Reconciling Certificate {:?}", self.name_any());
@@ -83,6 +84,7 @@ impl Certificate {
         let api_cert: Api<Certificate> = Api::namespaced(ctx.client.clone(), self.namespace().as_ref().unwrap());
         let api_secret: Api<Secret> = Api::namespaced(ctx.client.clone(), &ns);
         let status = self.status().cloned().unwrap_or_default();
+        let mut action = Action::await_change();
         
         let new_status = match status.key_exists{
             true => {
@@ -97,6 +99,11 @@ impl Certificate {
                             },
                             false => {
                                 debug!("Cert does not need renewal for Certificate {:?}", self.name_any());
+                                let valid_until = self.valid_until(&status)?;
+                                let requeue_duration = (valid_until - Utc::now())
+                                    .to_std()
+                                    .map_err(|e| Error::OtherError(e.to_string()))?;
+                                action = Action::requeue(requeue_duration);
                                 self.validate_cert(&status)?
                             }
                         }
@@ -119,8 +126,8 @@ impl Certificate {
         }));
         api_cert.patch_status(self.name_any().as_str(), &serverside, &patch).await
             .map_err(Error::KubeError)?;
-    
-        Ok(Action::await_change())
+
+        Ok(action)
     }
 
     fn valid_until(&self, status: &CertificateStatus) -> Result<DateTime<Utc>> {
@@ -182,7 +189,7 @@ impl Certificate {
         };
 
         let signer_key_secret = api_secret.get(&signer_key_secret_name).await.map_err(Error::KubeError)?;
-        let signer_key_secret_data = decode(&signer_key_secret);
+        let signer_key_secret_data = decode_secret(&signer_key_secret);
         let signer_key_data = signer_key_secret_data.get(Self::SECRET_KEY).ok_or( Error::OtherError("Key data not found".to_string()))?;
         let signer_key_text = match signer_key_data {
             Decoded::Utf8(s) => s.clone(),
@@ -191,7 +198,7 @@ impl Certificate {
 
         let my_key_secret_name = status.key.secret.clone().ok_or(Error::OtherError("Key secret not found".to_string()))?;
         let my_key_secret = api_secret.get(&my_key_secret_name).await.map_err(Error::KubeError)?;
-        let my_key_secret_data = decode(&my_key_secret);
+        let my_key_secret_data = decode_secret(&my_key_secret);
         let my_key_data = my_key_secret_data.get(Self::SECRET_KEY).ok_or(Error::OtherError("Key data not found in my key secret".to_string()))?;
         let my_key_text = match my_key_data {
             Decoded::Utf8(s) => s.clone(),
@@ -209,7 +216,7 @@ impl Certificate {
         // Create owned secret for the certificate
         let cert_secret_name = format!("{}-cert", self.name_any());
         let cert_data = self.create_owned_secret(cert_secret_name.clone(), &BTreeMap::from([
-            ("ndn.cert".to_string(), cert_info.cert_text),
+            (Self::CERT_KEY.to_string(), cert_info.cert_text),
         ]));
         let serverside = PatchParams::apply(CERTIFICATE_MANAGER_NAME);
         let cert_secret = api_secret.patch(&cert_secret_name, &serverside, &Patch::Apply(cert_data)).await
@@ -494,25 +501,13 @@ impl CertInfo {
     
 }
 
-enum Decoded {
-    /// Usually secrets are just short utf8 encoded strings
-    Utf8(String),
-    /// But it's allowed to just base64 encode binary in the values
-    #[allow(dead_code)]
-    Bytes(Vec<u8>),
-}
-
-fn decode(secret: &Secret) -> BTreeMap<String, Decoded> {
-    let mut res = BTreeMap::new();
-    // Ignoring binary data for now
-    if let Some(data) = secret.data.clone() {
-        for (k, v) in data {
-            if let Ok(b) = std::str::from_utf8(&v.0) {
-                res.insert(k, Decoded::Utf8(b.to_string()));
-            } else {
-                res.insert(k, Decoded::Bytes(v.0));
-            }
+pub fn is_cert_valid() -> impl Condition<Certificate> {
+    |obj: Option<&Certificate>| {
+        match obj {
+            Some(cert) => {
+                cert.status.clone().unwrap_or_default().cert.valid
+            },
+            None => false,
         }
     }
-    res
 }

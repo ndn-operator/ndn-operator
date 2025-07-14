@@ -1,16 +1,14 @@
 use clap::Parser;
+use k8s_openapi::api::core::v1::Secret;
 use kube::{
   api::{Api, Patch, PatchParams},
   runtime::wait::await_condition,
   Client,
 };
 use operator::{
-  network_controller::{
+  cert_controller::Certificate, dv::RouterConfig, fw::{FacesConfig, ForwarderConfig, UdpConfig, UnixConfig}, helper::{decode_secret, Decoded}, network_controller::{
     is_router_created, Router, RouterFaces, RouterStatus,
-  },
-  dv::RouterConfig,
-  fw::{FacesConfig, ForwarderConfig, UdpConfig, UnixConfig},
-  telemetry, Error, NdndConfig,
+  }, telemetry, Error, NdndConfig
 };
 use serde_json::json;
 use std::env;
@@ -25,12 +23,13 @@ struct Args {
     output: String,
 }
 
-fn gen_config(network_name: String, router_name: String, udp_unicast_port: i32, socket_path: Option<String> ) -> NdndConfig {
+fn gen_config(network_name: String, router_name: String, udp_unicast_port: i32, keychain: String, socket_path: Option<String>) -> NdndConfig {
 
   NdndConfig {
     dv: RouterConfig {
         network: format!("/{network_name}" ),
         router: format!("/{network_name}/{router_name}"),
+        keychain: keychain,
         ..RouterConfig::default()
     },
     fw: ForwarderConfig {
@@ -58,8 +57,15 @@ async fn main() -> anyhow::Result<()> {
   let network_name = env::var("NDN_NETWORK_NAME")?;
   let network_namespace = env::var("NDN_NETWORK_NAMESPACE")?;
   let router_name = env::var("NDN_ROUTER_NAME")?;
+  let certificate_name = env::var("NDN_ROUTER_CERT_NAME").unwrap_or(router_name.clone());
   let udp_unicast_port = env::var("NDN_UDP_UNICAST_PORT")?.parse::<i32>()?;
   let socket_path = env::var("NDN_SOCKET_PATH").ok();
+  let keychain_dir = env::var("NDN_KEYS_DIR")?;
+  let insecure = env::var("NDN_INSECURE")?.parse::<bool>()?;
+  let keychain = match insecure {
+      true => format!("dir://{keychain_dir}"),
+      false => "insecure".to_string(),
+  };
 
   let local_ip = local_ip_address::local_ip();
   debug!("local ip: {:?}", local_ip);
@@ -71,21 +77,68 @@ async fn main() -> anyhow::Result<()> {
   info!("local ip4: {:?}", ip4);
   info!("local ip6: {:?}", ip6);
   // Generate Ndnd config
-  let config = gen_config(network_name.clone(), router_name.clone(), udp_unicast_port, socket_path);
+  let config = gen_config(
+    network_name.clone(),
+    router_name.clone(),
+    udp_unicast_port,
+    keychain,
+    socket_path,
+  );
   let config_str = serde_yaml::to_string(&config)?;
   std::fs::write(args.output, config_str.clone())?;
   info!("{}", config_str);
 
-  // Wait for the router to be created
-  info!("Waiting for the router {}...", router_name);
   let client = Client::try_default().await?;
   let api_rt = Api::<Router>::namespaced(client.clone(), &network_namespace);
+  let api_cert = Api::<Certificate>::namespaced(client.clone(), &network_namespace);
+  let api_secret = Api::<Secret>::namespaced(client.clone(), &network_namespace);
+
+  info!("Waiting for the router {}...", router_name);
   let created = await_condition(
     api_rt.clone(),
     &router_name,
     is_router_created()
   );
-  let _ = tokio::time::timeout(std::time::Duration::from_secs(10), created).await?;
+  let _ = tokio::time::timeout(std::time::Duration::from_secs(3), created).await?;
+
+  // If not insecure, wait for certificate to be valid
+  if !insecure {
+    info!("Waiting for the router certificate to be valid...");
+    let cert_valid = await_condition(
+      api_cert.clone(),
+      &certificate_name,
+      operator::cert_controller::is_cert_valid()
+    );
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(3), cert_valid).await?;
+    // Copy cert and keys from the secrets to the keychain directory
+    let cert = api_cert.get_status(&certificate_name).await.map_err(Error::KubeError)?;
+    let key_secret_name = cert.status.clone()
+      .and_then(|status| status.key.secret)
+      .ok_or(Error::OtherError("Key secret not found".to_string()))?;
+    let cert_secret_name = cert.status
+      .and_then(|status| status.cert.secret)
+      .ok_or(Error::OtherError("Certificate secret not found".to_string()))?;
+    let key_secret = decode_secret(&api_secret.get(&key_secret_name).await.map_err(Error::KubeError)?);
+    let cert_secret = decode_secret(&api_secret.get(&cert_secret_name).await.map_err(Error::KubeError)?);
+    let key_data = key_secret.get(Certificate::SECRET_KEY)
+      .ok_or(Error::OtherError("Key not found in secret".to_string()))?;
+    let cert_data = cert_secret.get(Certificate::CERT_KEY)
+      .ok_or(Error::OtherError("Certificate not found in secret".to_string()))?;
+    let key_text = match key_data {
+      Decoded::Utf8(text) => text,
+      Decoded::Bytes(_) => return Err(Error::OtherError("Key is not a valid UTF-8 string".to_string()).into()),
+    };
+    let cert_text = match cert_data {
+      Decoded::Utf8(text) => text,
+      Decoded::Bytes(_) => return Err(Error::OtherError("Certificate is not a valid UTF-8 string".to_string()).into()),
+    };
+    // Write key and cert to the keychain directory
+    let key_path = format!("{}/ndn.key", keychain_dir);
+    let cert_path = format!("{}/ndn.cert", keychain_dir);
+    std::fs::write(&key_path, key_text)?;
+    std::fs::write(&cert_path, cert_text)?;
+    info!("Key and certificate written to {} and {}", key_path, cert_path);
+  }
 
   // Patch the status of the existing router
   let faces = RouterFaces {

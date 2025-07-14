@@ -1,10 +1,10 @@
 use std::{
-    collections::{BTreeMap, BTreeSet}, sync::Arc
+    collections::BTreeSet, sync::Arc
 };
 
 // use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 use kube::{
-    api::{ListParams, ObjectMeta, Patch, PatchParams},
+    api::{ListParams, Patch, PatchParams},
     core::Expression,
     runtime::{
         controller::Action,
@@ -18,7 +18,7 @@ use serde_with::skip_serializing_none;
 use json_patch::{jsonptr::PointerBuf, Patch as JsonPatch, PatchOperation, ReplaceOperation};
 use tracing::*;
 
-use super::{Context, Network, NETWORK_LABEL_KEY};
+use super::{Context, NETWORK_LABEL_KEY};
 use crate::{Error, Result};
 
 pub static ROUTER_FINALIZER: &str = "router.named-data.net/finalizer";
@@ -31,6 +31,7 @@ pub static ROUTER_MANAGER_NAME: &str = "router-controller";
 pub struct RouterSpec {
     pub prefix: String,
     pub node_name: String,
+    pub cert: Option<CertificateRef>,
 }
 
 #[skip_serializing_none]
@@ -47,6 +48,14 @@ pub struct RouterStatus {
 #[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct CertificateRef {
+    pub name: String,
+    pub namespace: Option<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct RouterFaces {
     pub udp4: Option<String>,
     pub tcp4: Option<String>,
@@ -56,7 +65,6 @@ pub struct RouterFaces {
 
 
 impl RouterFaces {
-
     pub fn to_btree_set(&self) -> BTreeSet<String> {
         let mut faces = BTreeSet::new();
         if let Some(ref udp4) = self.udp4 {
@@ -237,29 +245,6 @@ impl Router {
     }
 }
 
-pub fn create_owned_router(source: &Network, name: &String, node_name: &String) -> Router {
-    let oref = source.controller_owner_ref(&()).unwrap();
-    Router {
-        metadata: ObjectMeta {
-            name: Some(name.to_string()),
-            namespace: source.namespace(),
-            owner_references: Some(vec![oref]),
-            labels: {
-                let mut labels = source.labels().clone();
-                labels.extend(BTreeMap::from([(NETWORK_LABEL_KEY.to_string(), source.name_any())]));
-                Some(labels)
-            },
-            annotations: Some(source.annotations().clone()),
-            ..ObjectMeta::default()
-        },
-        spec: RouterSpec {
-            prefix: source.spec.prefix.clone(),
-            node_name: node_name.to_string(),
-        },
-        status: None,
-    }
-}
-
 pub fn is_router_created() -> impl Condition<Router> {
     |obj: Option<&Router>| {
         obj.is_some()
@@ -268,7 +253,7 @@ pub fn is_router_created() -> impl Condition<Router> {
 
 pub fn is_router_online() -> impl Condition<Router> {
     |obj: Option<&Router>| {
-        if let Some(router) = &obj {
+        if let Some(router) = obj {
             if let Some(status) = &router.status {
                 return status.online
             }
@@ -279,7 +264,7 @@ pub fn is_router_online() -> impl Condition<Router> {
 
 pub fn is_router_initialized() -> impl Condition<Router> {
     |obj: Option<&Router>| {
-        if let Some(router) = &obj {
+        if let Some(router) = obj {
             if let Some(status) = &router.status {
                 return status.initialized
             }

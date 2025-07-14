@@ -37,6 +37,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 mod ndnd;
 pub mod network_controller;
 pub mod cert_controller;
+pub mod helper;
 pub use crate::ndnd::*;
 
 /// Log and trace integrations
