@@ -1,5 +1,5 @@
 use super::Context;
-use crate::{cert_controller::{Certificate, CertificateSpec, IssuerRef}, helper::get_my_pod, network_controller::{CertificateRef, Router, RouterSpec}, Error, Result};
+use crate::{cert_controller::{is_cert_valid, Certificate, CertificateSpec, IssuerRef}, helper::get_my_pod, network_controller::{CertificateRef, Router, RouterSpec}, Error, Result};
 use k8s_openapi::{
     api::{
         apps::v1::{DaemonSet, DaemonSetSpec},
@@ -10,18 +10,17 @@ use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta},
 };
 use kube::{
-    api::{Api, Patch, PatchParams, ResourceExt},
-    runtime::{
+    api::{Api, Patch, PatchParams, ResourceExt}, runtime::{
         controller::Action,
-        events::{Event, EventType},
-    },
-    CustomResource, Resource,
+        events::{Event, EventType}, wait::await_condition,
+    }, Client, CustomResource, Resource
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::skip_serializing_none;
 use std::{collections::BTreeMap, sync::Arc};
+use tracing::*;
 
 pub static NETWORK_FINALIZER: &str = "network.named-data.net/finalizer";
 pub static NETWORK_MANAGER_NAME: &str = "network-controller";
@@ -56,6 +55,28 @@ pub struct TrustAnchorRef {
     pub name: String,
     pub kind: String,
     pub namespace: Option<String>,
+}
+
+impl TrustAnchorRef {
+    pub async fn get_cert_name(&self, client: &Client, default_ns: &str) -> Result<String> {
+        match self.kind.as_str() {
+            "Certificate" => {
+                let api_cert = Api::<Certificate>::namespaced(client.clone(), &self.namespace.clone().unwrap_or(default_ns.to_string()));
+                info!("Waiting for the router certificate to be valid...");
+                let cert_valid = await_condition(
+                    api_cert.clone(),
+                    &self.name,
+                    is_cert_valid()
+                );
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(3), cert_valid).await.map_err(|e| Error::OtherError(format!("Timeout while waiting for certificate to be valid: {}", e)))?;
+                let cert = api_cert.get_status(&self.name).await.map_err(Error::KubeError)?;
+                cert.status
+                    .and_then(|s| s.cert.name)
+                    .ok_or(Error::OtherError("Certificate name not found in status".to_string()))
+            }
+            _ => Err(Error::OtherError(format!("Unsupported trust anchor kind: {}", self.kind))),
+        }
+    }
 }
 
 #[skip_serializing_none]
@@ -535,7 +556,7 @@ impl Network {
                 ..ObjectMeta::default()
             },
             spec: RouterSpec {
-                prefix: self.spec.prefix.clone(),
+                prefix: format!("{}/{}", self.spec.prefix, self.name_any()),
                 node_name: node_name.to_string(),
                 cert: cert.map(|c| CertificateRef {
                     name: c.metadata.name.unwrap_or_default(),
@@ -547,7 +568,7 @@ impl Network {
         Ok(router)
     }
 
-    pub fn create_owned_certificate(&self, name: &str, cert_issuer: &IssuerRef) -> Result<Certificate> {
+    pub fn create_owned_certificate(&self, name: &str, router_name: &str, cert_issuer: &IssuerRef) -> Result<Certificate> {
         let oref = self.controller_owner_ref(&())
             .ok_or(Error::OtherError("Failed to create owner reference for certificate".to_string()))?;
         let cert = Certificate {
@@ -564,49 +585,12 @@ impl Network {
                 ..ObjectMeta::default()
             },
             spec: CertificateSpec {
-                prefix: self.spec.prefix.clone(),
+                prefix: format!("{}/{}/32=DV", self.spec.prefix, router_name),
                 issuer: cert_issuer.clone(),
                 ..CertificateSpec::default()
             },
             ..Certificate::default()
         };
         Ok(cert)
-    }
-}
-
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
-use std::convert::TryFrom;
-
-impl TryFrom<OwnerReference> for Network {
-    type Error = String;
-
-    fn try_from(owner_ref: OwnerReference) -> Result<Self, Self::Error> {
-        if owner_ref.kind != "Network" {
-            return Err(format!(
-                "Expected kind 'Network', found '{}'",
-                owner_ref.kind
-            ));
-        }
-
-        if owner_ref.api_version != "named-data.net/v1alpha1" {
-            return Err(format!(
-                "Expected apiVersion 'named-data.net/v1alpha1', found '{}'",
-                owner_ref.api_version
-            ));
-        }
-
-        let name = owner_ref.name;
-        if name.is_empty() {
-            return Err("OwnerReference name is empty".to_string());
-        }
-
-        Ok(Network {
-            metadata: kube::api::ObjectMeta {
-                name: Some(name),
-                ..Default::default()
-            },
-            spec: NetworkSpec::default(),
-            status: None,
-        })
     }
 }

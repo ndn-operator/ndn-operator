@@ -77,6 +77,7 @@ pub struct CertStatus {
 impl Certificate {
     pub const SECRET_KEY: &str = "ndn.key";
     pub const CERT_KEY: &str = "ndn.cert";
+    pub const SIGNER_CERT_KEY: &str = "signer.cert";
 
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
         debug!("Reconciling Certificate {:?}", self.name_any());
@@ -172,7 +173,7 @@ impl Certificate {
         let mut new_status = status.clone();
         let issuer_ref = &self.spec.issuer;
         // Get the issuer resource
-        let signer_key_secret_name = match issuer_ref.kind.as_str() {
+        let (signer_key_secret_name, signer_cert_secret_name) = match issuer_ref.kind.as_str() {
             "Certificate" => {
                 let api_issuer: Api<Certificate> = Api::namespaced(ctx.client.clone(), issuer_ref.namespace.as_deref().unwrap_or(&ns));
                 let issuer = api_issuer.get_status(&issuer_ref.name).await.map_err(Error::KubeError)?;
@@ -181,7 +182,12 @@ impl Certificate {
                 if !issuer_status.key_exists {
                     return Err(Error::OtherError("Issuer key not found".to_string()));
                 }
-                issuer_status.key.secret.as_ref().ok_or(Error::OtherError("Key secret not found".to_string()))?.clone()
+                if !issuer_status.cert_exists {
+                    return Err(Error::OtherError("Issuer certificate not found".to_string()));
+                }
+                let key_secret_name = issuer_status.key.secret.as_ref().ok_or(Error::OtherError("Key secret not found".to_string()))?.clone();
+                let cert_secret_name = issuer_status.cert.secret.as_ref().ok_or(Error::OtherError("Certificate secret not found".to_string()))?.clone();
+                (key_secret_name, cert_secret_name)
             },
             _ => {
                 return Err(Error::OtherError(format!("Unsupported issuer kind: {}", issuer_ref.kind)));
@@ -196,6 +202,14 @@ impl Certificate {
             Decoded::Bytes(_) => return Err(Error::OtherError("Key data is not UTF-8".to_string())),
         };
 
+        let signer_cert_secret = api_secret.get(&signer_cert_secret_name).await.map_err(Error::KubeError)?;
+        let signer_cert_secret_data = decode_secret(&signer_cert_secret);
+        let signer_cert_data = signer_cert_secret_data.get(Self::CERT_KEY).ok_or(Error::OtherError("Signer certificate data not found".to_string()))?;
+        let signer_cert_text = match signer_cert_data {
+            Decoded::Utf8(s) => s.clone(),
+            Decoded::Bytes(_) => return Err(Error::OtherError("Signer certificate data is not UTF-8".to_string())),
+        };
+
         let my_key_secret_name = status.key.secret.clone().ok_or(Error::OtherError("Key secret not found".to_string()))?;
         let my_key_secret = api_secret.get(&my_key_secret_name).await.map_err(Error::KubeError)?;
         let my_key_secret_data = decode_secret(&my_key_secret);
@@ -206,6 +220,7 @@ impl Certificate {
         };
         let std_duration: StdDuration = self.spec.renew_interval
             .unwrap_or(DurationString::new(StdDuration::from_secs(60 * 60 * 24 * 30))).into(); // Default to 30 days
+        // Sign the certificate
         let cert_info = sign_cert(&signer_key_text, &my_key_text, &SignCertParams {
             start: Some(Utc::now()),
             end: Some(Utc::now() + Duration::from_std(std_duration).unwrap_or_default()),
@@ -217,6 +232,7 @@ impl Certificate {
         let cert_secret_name = format!("{}-cert", self.name_any());
         let cert_data = self.create_owned_secret(cert_secret_name.clone(), &BTreeMap::from([
             (Self::CERT_KEY.to_string(), cert_info.cert_text),
+            (Self::SIGNER_CERT_KEY.to_string(), signer_cert_text),
         ]));
         let serverside = PatchParams::apply(CERTIFICATE_MANAGER_NAME);
         let cert_secret = api_secret.patch(&cert_secret_name, &serverside, &Patch::Apply(cert_data)).await

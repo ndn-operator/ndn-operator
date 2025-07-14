@@ -40,7 +40,7 @@ pub async fn pod_apply(pod: Arc<Pod>, ctx: Context) -> Result<Action> {
         Some(cert_issuer) => {
             let certificate_name = router_name.clone();
             info!("Creating certificate {} for router {} on node {}", certificate_name, router_name, node_name);
-            let certificate_data = nw.create_owned_certificate(&certificate_name, cert_issuer)?;
+            let certificate_data = nw.create_owned_certificate(&certificate_name, &router_name, cert_issuer)?;
             let api_cert = kube::Api::<Certificate>::namespaced(client.clone(), &ns);
             let certificate = api_cert
                 .patch(&certificate_name, &pp, &Patch::Apply(certificate_data))
