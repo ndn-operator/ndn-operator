@@ -151,12 +151,12 @@ impl Certificate {
     fn validate_cert(&self, status: &CertificateStatus) -> Result<CertificateStatus> {
         // Validate the certificate status
         let mut new_status = status.clone();
-        let valid_until = self.valid_until(&status)?;
+        let valid_until = self.valid_until(status)?;
         let now = Utc::now();
         debug!("Cert is valid until: {}", valid_until);
         new_status.cert.valid = valid_until > now;
 
-        let renew_before = self.renew_before(&status)?;
+        let renew_before = self.renew_before(status)?;
         debug!("Cert should be renewed before: {}", renew_before);
         new_status.needs_renewal = renew_before <= now;
         Ok(new_status)
@@ -175,7 +175,7 @@ impl Certificate {
         // Get the issuer resource
         let (signer_key_secret_name, signer_cert_secret_name) = match issuer_ref.kind.as_str() {
             "Certificate" => {
-                let api_issuer: Api<Certificate> = Api::namespaced(ctx.client.clone(), issuer_ref.namespace.as_deref().unwrap_or(&ns));
+                let api_issuer: Api<Certificate> = Api::namespaced(ctx.client.clone(), issuer_ref.namespace.as_deref().unwrap_or(ns));
                 let issuer = api_issuer.get_status(&issuer_ref.name).await.map_err(Error::KubeError)?;
                 let issuer_status = issuer.status.as_ref().ok_or(Error::OtherError("Issuer status not found".to_string()))?;
                 debug!("Issuer Status: {:?}", issuer_status);
@@ -453,7 +453,7 @@ fn sign_cert(signer_key: &str, cert_key: &str, params: &SignCertParams) -> Resul
         )));
     }
     let cert_text = String::from_utf8(output.stdout).map_err(|e| Error::OtherError(e.to_string()))?;
-    Ok(CertInfo::from_cert_text(cert_text)?)
+    CertInfo::from_cert_text(cert_text)
 }
 
 struct CertInfo {
@@ -497,10 +497,10 @@ impl CertInfo {
             let parts: Vec<&str> = validity_str.split(" - ").collect();
             if parts.len() == 2 {
                 let start = DateTime::parse_from_str(parts[0], "%Y-%m-%d %H:%M:%S %z %Z")
-                    .map_err(|e| Error::OtherError(format!("Failed to parse start date: {}", e)))?
+                    .map_err(|e| Error::OtherError(format!("Failed to parse start date: {e}")))?
                     .with_timezone(&Utc);
                 let end = DateTime::parse_from_str(parts[1], "%Y-%m-%d %H:%M:%S %z %Z")
-                    .map_err(|e| Error::OtherError(format!("Failed to parse end date: {}", e)))?
+                    .map_err(|e| Error::OtherError(format!("Failed to parse end date: {e}")))?
                     .with_timezone(&Utc);
                 validity = (start, end);
             }
@@ -510,7 +510,7 @@ impl CertInfo {
             name: name.ok_or_else(|| Error::OtherError("Could not parse cert name".to_string()))?,
             sig_type: sig_type.ok_or_else(|| Error::OtherError("Could not parse sig type".to_string()))?,
             signer_key: signer_key.ok_or_else(|| Error::OtherError("Could not parse signer key".to_string()))?,
-            validity: validity,
+            validity,
             cert_text,
         })
     }

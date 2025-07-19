@@ -21,6 +21,17 @@ spec:
         properties:
           spec:
             properties:
+              cert:
+                nullable: true
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    nullable: true
+                    type: string
+                required:
+                - name
+                type: object
               nodeName:
                 type: string
               prefix:

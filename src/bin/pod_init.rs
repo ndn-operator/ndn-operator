@@ -36,8 +36,8 @@ fn gen_config(
 	dv: RouterConfig {
 		network: format!("/{network_name}" ),
 		router: format!("/{network_name}/{router_name}"),
-		keychain: keychain,
-		trust_anchors: trust_anchors,
+		keychain,
+		trust_anchors,
 		..RouterConfig::default()
 	},
 	fw: ForwarderConfig {
@@ -166,9 +166,9 @@ async fn main() -> anyhow::Result<()> {
 	  Decoded::Bytes(_) => return Err(Error::OtherError("Certificate is not a valid UTF-8 string".to_string()).into()),
 	};
 	// Write key and cert to the keychain directory
-	let key_path = format!("{}/ndn.key", keychain_dir);
-	let cert_path = format!("{}/ndn.cert", keychain_dir);
-	let signer_cert_path = format!("{}/signer.cert", keychain_dir);
+	let key_path = format!("{keychain_dir}/ndn.key");
+	let cert_path = format!("{keychain_dir}/ndn.cert");
+	let signer_cert_path = format!("{keychain_dir}/signer.cert");
 	std::fs::write(&key_path, key_text)?;
 	std::fs::write(&cert_path, cert_text)?;
 	std::fs::write(&signer_cert_path, signer_cert_text)?;

@@ -68,7 +68,7 @@ impl TrustAnchorRef {
                     &self.name,
                     is_cert_valid()
                 );
-                let _ = tokio::time::timeout(std::time::Duration::from_secs(3), cert_valid).await.map_err(|e| Error::OtherError(format!("Timeout while waiting for certificate to be valid: {}", e)))?;
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(3), cert_valid).await.map_err(|e| Error::OtherError(format!("Timeout while waiting for certificate to be valid: {e}")))?;
                 let cert = api_cert.get_status(&self.name).await.map_err(Error::KubeError)?;
                 cert.status
                     .and_then(|s| s.cert.name)

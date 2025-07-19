@@ -36,15 +36,32 @@ spec:
                 type: object
               prefix:
                 type: string
+              routerCertIssuer:
+                nullable: true
+                properties:
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    nullable: true
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
               trustAnchors:
                 items:
                   properties:
+                    kind:
+                      type: string
                     name:
                       type: string
                     namespace:
                       nullable: true
                       type: string
                   required:
+                  - kind
                   - name
                   type: object
                 nullable: true
