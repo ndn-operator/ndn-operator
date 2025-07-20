@@ -373,7 +373,7 @@ impl Network {
                                     ..EnvVar::default()
                                 },
                                 EnvVar {
-                                    name: "RUST_LOG".to_string(),
+                                    name: "LOG".to_string(),
                                     value: Some("debug".to_string()),
                                     ..EnvVar::default()
                                 },
@@ -507,7 +507,7 @@ impl Network {
                                     ..EnvVar::default()
                                 },
                                 EnvVar {
-                                    name: "RUST_LOG".to_string(),
+                                    name: "LOG".to_string(),
                                     value: Some("debug".to_string()),
                                     ..EnvVar::default()
                                 },

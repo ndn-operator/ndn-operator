@@ -535,7 +535,7 @@ pub fn is_cert_valid() -> impl Condition<Certificate> {
 }
 
 async fn key_text_from_secret(api_secret: &Api<Secret>, secret_name: &str, key: &str) -> Result<String> {
-    let key_secret = api_secret.get(&secret_name).await.map_err(Error::KubeError)?;
+    let key_secret = api_secret.get(secret_name).await.map_err(Error::KubeError)?;
     let key_secret_data = decode_secret(&key_secret);
     let key_data = key_secret_data.get(key).ok_or( Error::OtherError("Key data not found".to_string()))?;
     let key_text = match key_data {
