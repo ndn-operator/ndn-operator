@@ -34,6 +34,14 @@ spec:
                   type: string
                 nullable: true
                 type: object
+              operator:
+                nullable: true
+                properties:
+                  image:
+                    type: string
+                required:
+                - image
+                type: object
               prefix:
                 type: string
               routerCertIssuer:

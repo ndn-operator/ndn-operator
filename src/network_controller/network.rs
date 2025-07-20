@@ -1,5 +1,5 @@
 use super::Context;
-use crate::{cert_controller::{is_cert_valid, Certificate, CertificateSpec, IssuerRef}, helper::get_my_pod, network_controller::{CertificateRef, Router, RouterSpec}, Error, Result};
+use crate::{cert_controller::{is_cert_valid, Certificate, CertificateSpec, IssuerRef}, helper::get_my_image, network_controller::{CertificateRef, Router, RouterSpec}, Error, Result};
 use k8s_openapi::{
     api::{
         apps::v1::{DaemonSet, DaemonSetSpec},
@@ -43,7 +43,8 @@ pub struct NetworkSpec {
     pub prefix: String,
     pub udp_unicast_port: i32,
     pub node_selector: Option<BTreeMap<String, String>>,
-    pub ndnd: Option<Ndnd>,
+    pub ndnd: Option<NdndSpec>,
+    pub operator: Option<OperatorSpec>,
     pub router_cert_issuer: Option<IssuerRef>,
     pub trust_anchors: Option<Vec<TrustAnchorRef>>,
 }
@@ -82,14 +83,29 @@ impl TrustAnchorRef {
 #[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct Ndnd {
+pub struct NdndSpec {
     pub image: String,
 }
 
-impl Default for Ndnd {
+impl Default for NdndSpec {
     fn default() -> Self {
         Self {
             image: "ghcr.io/named-data/ndnd:latest".to_string(),
+        }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OperatorSpec {
+    pub image: String,
+}
+
+impl Default for OperatorSpec {
+    fn default() -> Self {
+        Self {
+            image: "ghcr.io/ndn-operator/ndn-operator:latest".to_string(),
         }
     }
 }
@@ -104,13 +120,6 @@ impl Network {
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
         let api_nw: Api<Network> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let serverside = PatchParams::apply(NETWORK_MANAGER_NAME);
-        let my_pod = get_my_pod(ctx.client.clone())
-            .await
-            .expect("Failed to get my pod");
-        let my_pod_spec = my_pod.clone()
-            .spec
-            .expect("Failed to get pod spec");
-        let my_image = my_pod_spec.containers.first().expect("Failed to get my container").image.clone();
         let ns = self.namespace().unwrap();
         let api_sa: Api<ServiceAccount> = Api::namespaced(ctx.client.clone(), &ns);
         let api_role: Api<Role> = Api::namespaced(ctx.client.clone(), &ns);
@@ -119,7 +128,12 @@ impl Network {
         let sa_data = self.create_owned_sa();
         let role_date = self.create_owned_role();
         let role_binding_data = self.create_owned_role_binding(sa_data.name_any(), role_date.name_any());
-        let ds_data = self.create_owned_daemonset(my_image, Some(sa_data.name_any()))?;
+        let operator_spec = &self.spec.operator;
+        let ds_image = match operator_spec {
+            Some(op) => op.image.clone(),
+            None => get_my_image(ctx.client.clone()).await.ok().unwrap_or(OperatorSpec::default().image),
+        };
+        let ds_data = self.create_owned_daemonset(Some(ds_image), Some(sa_data.name_any()))?;
         // Create ServiceAccount
         let _sa = api_sa.patch(&self.name_any(), &serverside, &Patch::Apply(sa_data)).await.map_err(Error::KubeError)?;
         let _role = api_role.patch(&self.name_any(), &serverside, &Patch::Apply(role_date)).await.map_err(Error::KubeError)?;
@@ -235,6 +249,14 @@ impl Network {
             rules: Some(vec![
                 PolicyRule {
                     api_groups: Some(vec!["named-data.net".to_string()]),
+                    resources: Some(vec!["networks".to_string()]),
+                    verbs: vec![
+                        "get".to_string(),
+                    ],
+                    ..PolicyRule::default()
+                },
+                PolicyRule {
+                    api_groups: Some(vec!["named-data.net".to_string()]),
                     resources: Some(vec!["routers/status".to_string()]),
                     verbs: vec!["update".to_string(), "patch".to_string()],
                     ..PolicyRule::default()
@@ -250,6 +272,31 @@ impl Network {
                         "delete".to_string(),
                         "patch".to_string(),
                         "update".to_string(),
+                    ],
+                    ..PolicyRule::default()
+                },
+                PolicyRule {
+                    api_groups: Some(vec!["named-data.net".to_string()]),
+                    resources: Some(vec!["certificates".to_string()]),
+                    verbs: vec![
+                        "list".to_string(),
+                        "watch".to_string(),
+                    ],
+                    ..PolicyRule::default()
+                },
+                PolicyRule {
+                    api_groups: Some(vec!["named-data.net".to_string()]),
+                    resources: Some(vec!["certificates/status".to_string()]),
+                    verbs: vec![
+                        "get".to_string(),
+                    ],
+                    ..PolicyRule::default()
+                },
+                PolicyRule {
+                    api_groups: Some(vec!["".to_string()]),
+                    resources: Some(vec!["secrets".to_string()]),
+                    verbs: vec![
+                        "get".to_string(),
                     ],
                     ..PolicyRule::default()
                 },
@@ -539,7 +586,7 @@ impl Network {
         Ok(daemonset)
     }
 
-    pub fn create_owned_router(&self, name: &String, node_name: &String, cert: Option<Certificate>) -> Result<Router> {
+    pub fn create_owned_router(&self, name: &str, node_name: &str, cert: Option<Certificate>) -> Result<Router> {
         let oref = self.controller_owner_ref(&())
             .ok_or(Error::OtherError("Failed to create owner reference".to_string()))?;
         let router = Router {
@@ -556,7 +603,7 @@ impl Network {
                 ..ObjectMeta::default()
             },
             spec: RouterSpec {
-                prefix: format!("{}/{}", self.spec.prefix, self.name_any()),
+                prefix: format!("{}/{}", self.spec.prefix, name),
                 node_name: node_name.to_string(),
                 cert: cert.map(|c| CertificateRef {
                     name: c.metadata.name.unwrap_or_default(),

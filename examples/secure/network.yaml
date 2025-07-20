@@ -1,0 +1,18 @@
+apiVersion: named-data.net/v1alpha1
+kind: Network
+metadata:
+  name: test
+  namespace: mynetwork
+spec:
+  prefix: /test
+  udpUnicastPort: 6363
+  ndnd:
+    image: ghcr.io/named-data/ndnd:latest
+  operator:
+    image: ghcr.io/ndn-operator/ndn-operator:latest
+  routerCertIssuer:
+    kind: Certificate
+    name: self-signed
+  trustAnchors:
+  - name: self-signed
+    kind: Certificate

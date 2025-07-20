@@ -71,8 +71,8 @@ async fn main() -> anyhow::Result<()> {
     let keychain_dir = env::var("NDN_KEYS_DIR")?;
     let insecure = env::var("NDN_INSECURE")?.parse::<bool>()?;
     let keychain = match insecure {
-        true => format!("dir://{keychain_dir}"),
-        false => "insecure".to_string(),
+        true => "insecure".to_string(),
+        false => format!("dir://{keychain_dir}"),
     };
 
     let local_ip = local_ip_address::local_ip();
@@ -106,100 +106,100 @@ async fn main() -> anyhow::Result<()> {
 		None
 	};
 
-  // Generate Ndnd config
-  let config = gen_config(
-	network_name.clone(),
-	router_name.clone(),
-	udp_unicast_port,
-	keychain,
-	socket_path,
-	trust_anchors,
-  );
-  let config_str = serde_yaml::to_string(&config)?;
-  std::fs::write(args.output, config_str.clone())?;
-  info!("{}", config_str);
+    // Generate Ndnd config
+    let config = gen_config(
+        network_name.clone(),
+        router_name.clone(),
+        udp_unicast_port,
+        keychain,
+        socket_path,
+        trust_anchors,
+    );
+    let config_str = serde_yaml::to_string(&config)?;
+    std::fs::write(args.output, config_str.clone())?;
+    info!("{}", config_str);
 
 
-  info!("Waiting for the router {}...", router_name);
-  let created = await_condition(
-	api_rt.clone(),
-	&router_name,
-	is_router_created()
-  );
-  let _ = tokio::time::timeout(std::time::Duration::from_secs(3), created).await?;
+    info!("Waiting for the router {}...", router_name);
+    let created = await_condition(
+        api_rt.clone(),
+        &router_name,
+        is_router_created()
+    );
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(3), created).await?;
 
   // If not insecure, wait for certificate to be valid
-  if !insecure {
-	info!("Waiting for the router certificate to be valid...");
-	let cert_valid = await_condition(
-	  api_cert.clone(),
-	  &certificate_name,
-	  is_cert_valid()
-	);
-	let _ = tokio::time::timeout(std::time::Duration::from_secs(3), cert_valid).await?;
-	// Copy cert and keys from the secrets to the keychain directory
-	let cert = api_cert.get_status(&certificate_name).await.map_err(Error::KubeError)?;
-	let key_secret_name = cert.status.clone()
-	  .and_then(|status| status.key.secret)
-	  .ok_or(Error::OtherError("Key secret not found".to_string()))?;
-	let cert_secret_name = cert.status
-	  .and_then(|status| status.cert.secret)
-	  .ok_or(Error::OtherError("Certificate secret not found".to_string()))?;
-	let key_secret = decode_secret(&api_secret.get(&key_secret_name).await.map_err(Error::KubeError)?);
-	let cert_secret = decode_secret(&api_secret.get(&cert_secret_name).await.map_err(Error::KubeError)?);
-	let key_data = key_secret.get(Certificate::SECRET_KEY)
-	  .ok_or(Error::OtherError("Key not found in secret".to_string()))?;
-	let cert_data = cert_secret.get(Certificate::CERT_KEY)
-	  .ok_or(Error::OtherError("Certificate not found in secret".to_string()))?;
-	let signer_data = cert_secret.get(Certificate::SIGNER_CERT_KEY)
-	  .ok_or(Error::OtherError("Signer certificate not found in secret".to_string()))?;
-	let signer_cert_text = match signer_data {
-	  Decoded::Utf8(text) => text,
-	  Decoded::Bytes(_) => return Err(Error::OtherError("Signer certificate is not a valid UTF-8 string".to_string()).into()),
-	};
-	let key_text = match key_data {
-	  Decoded::Utf8(text) => text,
-	  Decoded::Bytes(_) => return Err(Error::OtherError("Key is not a valid UTF-8 string".to_string()).into()),
-	};
-	let cert_text = match cert_data {
-	  Decoded::Utf8(text) => text,
-	  Decoded::Bytes(_) => return Err(Error::OtherError("Certificate is not a valid UTF-8 string".to_string()).into()),
-	};
-	// Write key and cert to the keychain directory
-	let key_path = format!("{keychain_dir}/ndn.key");
-	let cert_path = format!("{keychain_dir}/ndn.cert");
-	let signer_cert_path = format!("{keychain_dir}/signer.cert");
-	std::fs::write(&key_path, key_text)?;
-	std::fs::write(&cert_path, cert_text)?;
-	std::fs::write(&signer_cert_path, signer_cert_text)?;
-	info!("Key and certificate written to {} and {}", key_path, cert_path);
-  }
+    if !insecure {
+        info!("Waiting for the router certificate to be valid...");
+        let cert_valid = await_condition(
+            api_cert.clone(),
+            &certificate_name,
+            is_cert_valid()
+        );
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(3), cert_valid).await?;
+        // Copy cert and keys from the secrets to the keychain directory
+        let cert = api_cert.get_status(&certificate_name).await.map_err(Error::KubeError)?;
+        let key_secret_name = cert.status.clone()
+            .and_then(|status| status.key.secret)
+            .ok_or(Error::OtherError("Key secret not found".to_string()))?;
+        let cert_secret_name = cert.status
+            .and_then(|status| status.cert.secret)
+            .ok_or(Error::OtherError("Certificate secret not found".to_string()))?;
+        let key_secret = decode_secret(&api_secret.get(&key_secret_name).await.map_err(Error::KubeError)?);
+        let cert_secret = decode_secret(&api_secret.get(&cert_secret_name).await.map_err(Error::KubeError)?);
+        let key_data = key_secret.get(Certificate::SECRET_KEY)
+            .ok_or(Error::OtherError("Key not found in secret".to_string()))?;
+        let cert_data = cert_secret.get(Certificate::CERT_KEY)
+            .ok_or(Error::OtherError("Certificate not found in secret".to_string()))?;
+        let signer_data = cert_secret.get(Certificate::SIGNER_CERT_KEY)
+            .ok_or(Error::OtherError("Signer certificate not found in secret".to_string()))?;
+        let signer_cert_text = match signer_data {
+            Decoded::Utf8(text) => text,
+            Decoded::Bytes(_) => return Err(Error::OtherError("Signer certificate is not a valid UTF-8 string".to_string()).into()),
+        };
+        let key_text = match key_data {
+            Decoded::Utf8(text) => text,
+            Decoded::Bytes(_) => return Err(Error::OtherError("Key is not a valid UTF-8 string".to_string()).into()),
+        };
+        let cert_text = match cert_data {
+            Decoded::Utf8(text) => text,
+            Decoded::Bytes(_) => return Err(Error::OtherError("Certificate is not a valid UTF-8 string".to_string()).into()),
+        };
+        // Write key and cert to the keychain directory
+        let key_path = format!("{keychain_dir}/ndn.key");
+        let cert_path = format!("{keychain_dir}/ndn.cert");
+        let signer_cert_path = format!("{keychain_dir}/signer.cert");
+        std::fs::write(&key_path, key_text)?;
+        std::fs::write(&cert_path, cert_text)?;
+        std::fs::write(&signer_cert_path, signer_cert_text)?;
+        info!("Key and certificate written to {} and {}", key_path, cert_path);
+    }
 
   // Patch the status of the existing router
-  let faces = RouterFaces {
-	udp4: {
-		ip4.map(|ip4| format!("udp://{ip4}:{udp_unicast_port}"))
-	},
-	tcp4: None,
-	udp6: {
-		ip6.map(|ip6| format!("udp://[{ip6}]:{udp_unicast_port}"))
-	},
-	tcp6: None,
-  };
-  let patch_status = json!({
-	"status": RouterStatus {
-	  faces,
-	  initialized: true,
-	  ..RouterStatus::default()
-	}
-  });
-  debug!("Patch status: {:?}", patch_status);
-  let pp = PatchParams::default();
-  let router = api_rt
-	.patch_status(&router_name, &pp, &Patch::Merge(patch_status))
-	.await
-	.map_err(Error::KubeError)?;
-  info!("Patched router status: {:?}", router.status);
+    let faces = RouterFaces {
+        udp4: {
+            ip4.map(|ip4| format!("udp://{ip4}:{udp_unicast_port}"))
+        },
+        tcp4: None,
+        udp6: {
+            ip6.map(|ip6| format!("udp://[{ip6}]:{udp_unicast_port}"))
+        },
+        tcp6: None,
+    };
+    let patch_status = json!({
+        "status": RouterStatus {
+            faces,
+            initialized: true,
+            ..RouterStatus::default()
+        }
+    });
+    debug!("Patch status: {:?}", patch_status);
+    let pp = PatchParams::default();
+    let router = api_rt
+        .patch_status(&router_name, &pp, &Patch::Merge(patch_status))
+        .await
+        .map_err(Error::KubeError)?;
+    info!("Patched router status: {:?}", router.status);
 
-  Ok(())
+    Ok(())
 }

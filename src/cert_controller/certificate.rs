@@ -20,7 +20,6 @@ use tracing::*;
 
 pub static CERTIFICATE_FINALIZER: &str = "certificate.named-data.net/finalizer";
 pub static CERTIFICATE_MANAGER_NAME: &str = "cert-controller";
-const NDND_PATH: &str = "/usr/local/bin/ndnd";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -173,41 +172,33 @@ impl Certificate {
         let mut new_status = status.clone();
         let issuer_ref = &self.spec.issuer;
         // Get the issuer resource
-        let (signer_key_secret_name, signer_cert_secret_name) = match issuer_ref.kind.as_str() {
+        let (signer_key_secret_name, signer_cert_secret_name, self_signed) = match issuer_ref.kind.as_str() {
             "Certificate" => {
                 let api_issuer: Api<Certificate> = Api::namespaced(ctx.client.clone(), issuer_ref.namespace.as_deref().unwrap_or(ns));
                 let issuer = api_issuer.get_status(&issuer_ref.name).await.map_err(Error::KubeError)?;
                 let issuer_status = issuer.status.as_ref().ok_or(Error::OtherError("Issuer status not found".to_string()))?;
                 debug!("Issuer Status: {:?}", issuer_status);
-                if !issuer_status.key_exists {
-                    return Err(Error::OtherError("Issuer key not found".to_string()));
-                }
-                if !issuer_status.cert_exists {
-                    return Err(Error::OtherError("Issuer certificate not found".to_string()));
-                }
-                let key_secret_name = issuer_status.key.secret.as_ref().ok_or(Error::OtherError("Key secret not found".to_string()))?.clone();
-                let cert_secret_name = issuer_status.cert.secret.as_ref().ok_or(Error::OtherError("Certificate secret not found".to_string()))?.clone();
-                (key_secret_name, cert_secret_name)
+                let key_secret_name = match issuer_status.key_exists {
+                    true => issuer_status.key.secret.clone(),
+                    false => None,
+                };
+                let cert_secret_name = match issuer_status.cert_exists {
+                    true => issuer_status.cert.secret.clone(),
+                    false => None,
+                };
+                let self_signed = issuer.metadata.uid.unwrap_or_default() == self.metadata.uid.clone().unwrap_or_default();
+                (key_secret_name, cert_secret_name, self_signed)
             },
             _ => {
                 return Err(Error::OtherError(format!("Unsupported issuer kind: {}", issuer_ref.kind)));
             }
         };
 
-        let signer_key_secret = api_secret.get(&signer_key_secret_name).await.map_err(Error::KubeError)?;
-        let signer_key_secret_data = decode_secret(&signer_key_secret);
-        let signer_key_data = signer_key_secret_data.get(Self::SECRET_KEY).ok_or( Error::OtherError("Key data not found".to_string()))?;
-        let signer_key_text = match signer_key_data {
-            Decoded::Utf8(s) => s.clone(),
-            Decoded::Bytes(_) => return Err(Error::OtherError("Key data is not UTF-8".to_string())),
-        };
-
-        let signer_cert_secret = api_secret.get(&signer_cert_secret_name).await.map_err(Error::KubeError)?;
-        let signer_cert_secret_data = decode_secret(&signer_cert_secret);
-        let signer_cert_data = signer_cert_secret_data.get(Self::CERT_KEY).ok_or(Error::OtherError("Signer certificate data not found".to_string()))?;
-        let signer_cert_text = match signer_cert_data {
-            Decoded::Utf8(s) => s.clone(),
-            Decoded::Bytes(_) => return Err(Error::OtherError("Signer certificate data is not UTF-8".to_string())),
+        let signer_key_text = match signer_key_secret_name {
+            Some(secret_name) => {
+                key_text_from_secret(api_secret, &secret_name, Self::SECRET_KEY).await?
+            }
+            None => return Err(Error::OtherError("Signer key secret name not found".to_string())),
         };
 
         let my_key_secret_name = status.key.secret.clone().ok_or(Error::OtherError("Key secret not found".to_string()))?;
@@ -227,6 +218,20 @@ impl Certificate {
             issuer: Some(self.spec.issuer.name.clone()),
             info: None,
         })?;
+
+        // signer cert might not exist if the issuer is self-signed
+        let signer_cert_text = match signer_cert_secret_name {
+            Some(secret_name) => {
+                key_text_from_secret(api_secret, &secret_name, Self::CERT_KEY).await?
+            }
+            None => {
+                if !self_signed {
+                    return Err(Error::OtherError("Signer cert secret not found".to_string()));
+                };
+                debug!("Signer cert secret not found, using self-signed cert");
+                cert_info.cert_text.clone() // Use the signed cert text as the signer cert
+            }
+        };
 
         // Create owned secret for the certificate
         let cert_secret_name = format!("{}-cert", self.name_any());
@@ -283,7 +288,7 @@ impl Certificate {
             .map_err(Error::KubeError)?;
 
         // Publish an event for the created key
-        debug!("Created Key Secret: {:?}", secret.name_any());
+        info!("Created Key Secret: {:?}", secret.name_any());
         ctx.recorder
             .publish(
                 &Event {
@@ -342,8 +347,9 @@ impl Certificate {
 }
 
 fn generate_key(prefix: &str) -> Result<KeyInfo, Error> {
+    let ndnd_path: &str = option_env!("NDND_PATH").unwrap_or("/ndnd");
     // Generate a new key
-    let output = Command::new(NDND_PATH)
+    let output = Command::new(ndnd_path)
         .arg("sec")
         .arg("keygen")
         .arg(prefix)
@@ -408,7 +414,7 @@ struct SignCertParams {
 }
 
 fn sign_cert(signer_key: &str, cert_key: &str, params: &SignCertParams) -> Result<CertInfo, Error> {
-    
+    let ndnd_path: &str = option_env!("NDND_PATH").unwrap_or("/ndnd");
     // Create a temporary file with the signer key
     let temp_signer_key_file = NamedTempFile::new().map_err(Error::IoError)?;
     std::fs::write(temp_signer_key_file.path(), signer_key).map_err(Error::IoError)?;
@@ -440,7 +446,7 @@ fn sign_cert(signer_key: &str, cert_key: &str, params: &SignCertParams) -> Resul
     }
     debug!("Running ndnd sec sign-cert with args: {:?}", args);
     // cert_key goes to stdin
-    let output = Command::new(NDND_PATH)
+    let output = Command::new(ndnd_path)
         .args(&args)
         .stdin(std::fs::File::open(temp_cert_key_file.path()).map_err(Error::IoError)?)
         .output()
@@ -526,4 +532,15 @@ pub fn is_cert_valid() -> impl Condition<Certificate> {
             None => false,
         }
     }
+}
+
+async fn key_text_from_secret(api_secret: &Api<Secret>, secret_name: &str, key: &str) -> Result<String> {
+    let key_secret = api_secret.get(&secret_name).await.map_err(Error::KubeError)?;
+    let key_secret_data = decode_secret(&key_secret);
+    let key_data = key_secret_data.get(key).ok_or( Error::OtherError("Key data not found".to_string()))?;
+    let key_text = match key_data {
+        Decoded::Utf8(s) => s.clone(),
+        Decoded::Bytes(_) => return Err(Error::OtherError("Key data is not UTF-8".to_string())),
+    };
+    Ok(key_text)
 }

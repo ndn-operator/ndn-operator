@@ -22,6 +22,15 @@ pub async fn get_my_pod(client: Client) -> Result<Pod> {
     api_pods.get(pod_name).await.map_err(Error::KubeError)
 }
 
+pub async fn get_my_image(client: Client) -> Result<String> {
+    let pod = get_my_pod(client).await?;
+    pod.spec
+        .ok_or(Error::OtherError("Pod spec not found".to_string()))?
+        .containers.first()
+        .ok_or(Error::OtherError("Container not found".to_string()))?
+        .image.clone().ok_or(Error::OtherError("Image not found".to_string()))
+}
+
 pub enum Decoded {
     /// Usually secrets are just short utf8 encoded strings
     Utf8(String),
