@@ -28,6 +28,8 @@ spec:
           env:
           - name: LOG
             value: "{{ .Values.logLevel }}"
+          - name: TMP_DIR
+            value: /tmp
           resources:
             limits:
               cpu: "{{ .Values.resources.limits.cpu }}"
@@ -35,3 +37,9 @@ spec:
             requests:
               cpu: "{{ .Values.resources.requests.cpu }}"
               memory: "{{ .Values.resources.requests.memory }}"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

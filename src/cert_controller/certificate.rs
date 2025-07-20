@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, process::Command, sync::Arc};
+use std::{collections::BTreeMap, env, path::Path, process::Command, sync::Arc};
 use duration_string::DurationString;
 use tempfile::NamedTempFile;
 use crate::{helper::{decode_secret, Decoded}, Error, Result};
@@ -411,12 +411,14 @@ struct SignCertParams {
 
 fn sign_cert(signer_key: &str, cert_key: &str, params: &SignCertParams) -> Result<CertInfo, Error> {
     let ndnd_path: &str = option_env!("NDND_PATH").unwrap_or("/ndnd");
+    let binding = env::var("TMP_DIR").unwrap_or("/tmp".to_string());
+    let tmp_dir = Path::new(&binding);
     // Create a temporary file with the signer key
-    let mut temp_signer_key_file = NamedTempFile::new().map_err(Error::IoError)?;
+    let mut temp_signer_key_file = NamedTempFile::new_in(tmp_dir).map_err(Error::IoError)?;
     debug!("Temporary signer key file created: {:?}", temp_signer_key_file.path());
     writeln!(temp_signer_key_file, "{signer_key}").map_err(Error::IoError)?;
     // Create a temporary file with the cert key
-    let mut temp_cert_key_file = NamedTempFile::new().map_err(Error::IoError)?;
+    let mut temp_cert_key_file = NamedTempFile::new_in(tmp_dir).map_err(Error::IoError)?;
     debug!("Temporary cert key file created: {:?}", temp_cert_key_file.path());
     writeln!(temp_cert_key_file, "{cert_key}").map_err(Error::IoError)?;
 
