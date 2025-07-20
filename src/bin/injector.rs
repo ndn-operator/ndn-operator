@@ -7,7 +7,7 @@ use kube::{
     },
     Client,
 };
-use operator::controller::Network;
+use operator::{network_controller::Network, telemetry};
 use std::{convert::Infallible, env, error::Error};
 use tracing::*;
 use warp::{reply, Filter, Reply};
@@ -18,7 +18,7 @@ static ANNOTATION_NAMESPACE: &str = "networks.named-data.net/namespace";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+    telemetry::init().await;
     
     let listen_port = env::var("NDN_INJECTOR_PORT").unwrap_or("8443".to_string()).parse::<u16>()?;
     let listen_ip = env::var("NDN_INJECTOR_IP").unwrap_or("0.0.0.0".to_string()).parse::<std::net::IpAddr>()?;

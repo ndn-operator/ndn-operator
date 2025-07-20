@@ -11,6 +11,12 @@ pub enum Error {
     #[error("IO Error: {0}")]
     IoError(std::io::Error),
 
+    #[error("UTF-8 Error: {0}")]
+    Utf8Error(#[source] std::string::FromUtf8Error),
+
+    #[error("Parse Error: {0}")]
+    ParseError(#[source] chrono::ParseError),
+
     #[error("Finalizer Error: {0}")]
     // NB: awkward type because finalizer::Error embeds the reconciler error (which is this)
     // so boxing this error to break cycles
@@ -29,7 +35,9 @@ pub enum Error {
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 mod ndnd;
-pub mod controller;
+pub mod network_controller;
+pub mod cert_controller;
+pub mod helper;
 pub use crate::ndnd::*;
 
 /// Log and trace integrations
