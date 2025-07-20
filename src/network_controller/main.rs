@@ -18,7 +18,7 @@ use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
 use super::{pod_apply, pod_cleanup, Network, Router, DS_LABEL_KEY, NETWORK_FINALIZER, ROUTER_FINALIZER};
-use crate::{controller::POD_FINALIZER, Error, Result};
+use crate::{network_controller::POD_FINALIZER, Error, Result};
 
 
 // Context for our reconciler

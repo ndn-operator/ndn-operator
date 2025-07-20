@@ -35,7 +35,7 @@ spec:
           mountPath: /etc/ndn/injector
           readOnly: true
         env:
-        - name: RUST_LOG
+        - name: LOG
           value: "{{ .Values.logLevel }}"
         - name: NDN_INJECTOR_TLS_CERT_FILE
           value: /etc/ndn/injector/tls.crt

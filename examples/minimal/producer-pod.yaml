@@ -11,7 +11,7 @@ spec:
   containers:
   - name: server
     image: ghcr.io/named-data/ndnd:latest
-    command: ["/ndnd", "pingserver"]
+    command: ["/ndnd", "pingserver", "--expose"]
     args: ["/test/pingserver"]
     imagePullPolicy: IfNotPresent
     resources:

@@ -1,0 +1,12 @@
+apiVersion: named-data.net/v1alpha1
+kind: Certificate
+metadata:
+  name: self-signed
+  namespace: mynetwork
+spec:
+  prefix: /test
+  issuer:
+    name: self-signed
+    kind: Certificate
+  renewBefore: 23h50m
+  renewInterval: 4d15h

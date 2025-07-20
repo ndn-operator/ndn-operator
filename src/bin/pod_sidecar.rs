@@ -1,5 +1,5 @@
 use operator::{
-    controller::{Router, ROUTER_MANAGER_NAME}, telemetry, Error
+    network_controller::{Router, ROUTER_MANAGER_NAME}, telemetry, Error
 };
 use futures::{TryStreamExt, pin_mut};
 use kube::{api::{Patch, PatchParams}, runtime::{watcher, WatchStreamExt}, Api, Client};
