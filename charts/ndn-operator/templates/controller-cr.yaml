@@ -38,4 +38,4 @@ rules:
   verbs: ["create", "patch", "delete"]
 - apiGroups: [""]
   resources: ["secrets"]
-  verbs: ["create", "get", "delete"]
+  verbs: ["create", "get", "patch", "delete"]

@@ -1,5 +1,6 @@
 use super::Context;
 use crate::{cert_controller::{is_cert_valid, Certificate, CertificateSpec, IssuerRef}, helper::get_my_image, network_controller::{CertificateRef, Router, RouterSpec}, Error, Result};
+use duration_string::DurationString;
 use k8s_openapi::{
     api::{
         apps::v1::{DaemonSet, DaemonSetSpec},
@@ -19,7 +20,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::skip_serializing_none;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Duration as StdDuration};
 use tracing::*;
 
 pub static NETWORK_FINALIZER: &str = "network.named-data.net/finalizer";
@@ -634,7 +635,8 @@ impl Network {
             spec: CertificateSpec {
                 prefix: format!("{}/{}/32=DV", self.spec.prefix, router_name),
                 issuer: cert_issuer.clone(),
-                ..CertificateSpec::default()
+                renew_interval: Some(DurationString::new(StdDuration::from_secs(60 * 60 * 24 * 1))), // Default to 1 day
+                renew_before: Some(DurationString::new(StdDuration::from_secs(60 * 60))), // Default to 1 hour
             },
             ..Certificate::default()
         };
