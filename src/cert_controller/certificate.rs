@@ -5,6 +5,7 @@ use crate::{helper::{decode_secret, Decoded}, Error, Result};
 use super::Context;
 use chrono::{DateTime, Duration, Utc};
 use std::time::Duration as StdDuration;
+use std::io::Write;
 use k8s_openapi::api::core::v1::Secret;
 use kube::{
     api::{Api, ObjectMeta, Patch, PatchParams, PostParams, ResourceExt}, core::object::HasStatus, runtime::{
@@ -187,6 +188,7 @@ impl Certificate {
                     false => None,
                 };
                 let self_signed = issuer.metadata.uid.unwrap_or_default() == self.metadata.uid.clone().unwrap_or_default();
+                debug!("Self-signed: {}", self_signed);
                 (key_secret_name, cert_secret_name, self_signed)
             },
             _ => {
@@ -202,13 +204,7 @@ impl Certificate {
         };
 
         let my_key_secret_name = status.key.secret.clone().ok_or(Error::OtherError("Key secret not found".to_string()))?;
-        let my_key_secret = api_secret.get(&my_key_secret_name).await.map_err(Error::KubeError)?;
-        let my_key_secret_data = decode_secret(&my_key_secret);
-        let my_key_data = my_key_secret_data.get(Self::SECRET_KEY).ok_or(Error::OtherError("Key data not found in my key secret".to_string()))?;
-        let my_key_text = match my_key_data {
-            Decoded::Utf8(s) => s.clone(),
-            Decoded::Bytes(_) => return Err(Error::OtherError("Key data is not UTF-8".to_string())),
-        };
+        let my_key_text = key_text_from_secret(api_secret, &my_key_secret_name, Self::SECRET_KEY).await?;
         let std_duration: StdDuration = self.spec.renew_interval
             .unwrap_or(DurationString::new(StdDuration::from_secs(60 * 60 * 24 * 30))).into(); // Default to 30 days
         // Sign the certificate
@@ -416,12 +412,14 @@ struct SignCertParams {
 fn sign_cert(signer_key: &str, cert_key: &str, params: &SignCertParams) -> Result<CertInfo, Error> {
     let ndnd_path: &str = option_env!("NDND_PATH").unwrap_or("/ndnd");
     // Create a temporary file with the signer key
-    let temp_signer_key_file = NamedTempFile::new().map_err(Error::IoError)?;
-    std::fs::write(temp_signer_key_file.path(), signer_key).map_err(Error::IoError)?;
+    let mut temp_signer_key_file = NamedTempFile::new().map_err(Error::IoError)?;
+    debug!("Temporary signer key file created: {:?}", temp_signer_key_file.path());
+    writeln!(temp_signer_key_file, "{signer_key}").map_err(Error::IoError)?;
     // Create a temporary file with the cert key
-    let temp_cert_key_file = NamedTempFile::new().map_err(Error::IoError)?;
-    std::fs::write(temp_cert_key_file.path(), cert_key).map_err(Error::IoError)?;
-    
+    let mut temp_cert_key_file = NamedTempFile::new().map_err(Error::IoError)?;
+    debug!("Temporary cert key file created: {:?}", temp_cert_key_file.path());
+    writeln!(temp_cert_key_file, "{cert_key}").map_err(Error::IoError)?;
+
     // Transform the params into command line arguments
     let mut args = vec!["sec", "sign-cert", temp_signer_key_file.path().to_str().unwrap()];
     let start_str;
