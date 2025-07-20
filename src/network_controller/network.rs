@@ -635,7 +635,7 @@ impl Network {
             spec: CertificateSpec {
                 prefix: format!("{}/{}/32=DV", self.spec.prefix, router_name),
                 issuer: cert_issuer.clone(),
-                renew_interval: Some(DurationString::new(StdDuration::from_secs(60 * 60 * 24 * 1))), // Default to 1 day
+                renew_interval: Some(DurationString::new(StdDuration::from_secs(60 * 60 * 24))), // Default to 1 day
                 renew_before: Some(DurationString::new(StdDuration::from_secs(60 * 60))), // Default to 1 hour
             },
             ..Certificate::default()
