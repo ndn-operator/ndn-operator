@@ -24,13 +24,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Generate CRDs
         run: |
-          cargo run --package ndn-operator --bin gencrd -- --output ./charts/ndn-operator-crd/templates
+          cargo run --package ndn-operator --bin gencrd -- --output ./charts/ndn-operator/templates/crd
       - name: Check CRDs
         run: |
           # Check if there are any changes in the CRD files
-          git diff --exit-code ./charts/ndn-operator-crd/templates
+          git diff --exit-code ./charts/ndn-operator/templates/crd
           # If there are changes, fail the job
           if [ $? -ne 0 ]; then
-            echo "CRD files have changed. Please update the charts/ndn-operator-crd/templates directory."
+            echo "CRD files have changed. Please update the charts/ndn-operator/templates/crd directory."
             exit 1
           fi

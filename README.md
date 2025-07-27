@@ -10,8 +10,8 @@
 ```shell
 helm repo add ndn-operator https://ndn-operator.github.io/ndn-operator
 helm repo update
-helm install ndn-operator-crd ndn-operator/ndn-operator-crd
-helm install ndn-operator ndn-operator/ndn-operator
+helm install ndn-operator ndn-operator/ndn-operator \
+    --namespace ndn-operator --create-namespace
 ```
 ## Create secured ndn network
 
