@@ -1,4 +1,8 @@
 # NDN Operator
+![GitHub Tag](https://img.shields.io/github/v/tag/ndn-operator/ndn-operator?filter=v*&style=flat&label=version)
+![GitHub License](https://img.shields.io/github/license/ndn-operator/ndn-operator)
+[![Rust Report Card](https://rust-reportcard.xuri.me/badge/github.com/ndn-operator/ndn-operator)](https://rust-reportcard.xuri.me/report/github.com/ndn-operator/ndn-operator)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ndn-operator/ndn-operator/docker-push.yaml)
 
 **NDN Operator** is a Kubernetes operator that integrates [Named Data Networking](https://github.com/named-data) into your Kubernetes cluster
 
