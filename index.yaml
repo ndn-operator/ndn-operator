@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   ndn-operator:
   - apiVersion: v2
+    appVersion: 0.5.1
+    created: "2025-07-27T19:27:10.344629378Z"
+    description: A Helm chart for NDN Operator
+    digest: 4e716a97087c58215a0afc9f51b54f5f3e1115dde4aa18a67383bf569037d3e1
+    name: ndn-operator
+    type: application
+    urls:
+    - https://github.com/ndn-operator/ndn-operator/releases/download/ndn-operator-0.5.1/ndn-operator-0.5.1.tgz
+    version: 0.5.1
+  - apiVersion: v2
     appVersion: 0.5.0
     created: "2025-07-20T21:47:12.659704159Z"
     description: A Helm chart for NDN Operator
@@ -181,4 +191,4 @@ entries:
     urls:
     - https://github.com/ndn-operator/ndn-operator/releases/download/ndn-operator-crd-0.1.0/ndn-operator-crd-0.1.0.tgz
     version: 0.1.0
-generated: "2025-07-20T21:47:12.769205486Z"
+generated: "2025-07-27T19:27:10.34468782Z"
