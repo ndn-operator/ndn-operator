@@ -24,13 +24,35 @@ pub static CERTIFICATE_MANAGER_NAME: &str = "cert-controller";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[kube(group = "named-data.net", version = "v1alpha1", kind = "Certificate", derive="Default", namespaced, shortname = "ndncert")]
-#[kube(status = "CertificateStatus")]
+#[kube(
+    group = "named-data.net",
+    version = "v1alpha1",
+    kind = "Certificate",
+    derive="Default",
+    namespaced,
+    shortname = "cert",
+    doc = "Certificate is a custom resource for managing NDN certificates",
+    printcolumn = r#"{"name":"Prefix","jsonPath":".spec.prefix","type":"string"}"#,
+    printcolumn = r#"{"name":"Key","jsonPath":".status.key.name","type":"string"}"#,
+    printcolumn = r#"{"name":"Cert","jsonPath":".status.cert.name","type":"string"}"#,
+    printcolumn = r#"{"name":"Valid","jsonPath":".status.cert.valid","type":"boolean"}"#,
+    printcolumn = r#"{"name":"Key Exists","jsonPath":".status.keyExists","type":"boolean"}"#,
+    printcolumn = r#"{"name":"Cert Exists","jsonPath":".status.certExists","type":"boolean"}"#,
+    printcolumn = r#"{"name":"Needs Renewal","jsonPath":".status.needsRenewal","type":"boolean"}"#,
+    status = "CertificateStatus",
+)]
 pub struct CertificateSpec {
+    /// The prefix for the certificate, used for routing and naming conventions
     pub prefix: String,
+    /// The issuer of the certificate, which can be another Certificate or an external issuer.
+    /// Can reference itself if the certificate is self-signed
     pub issuer: IssuerRef,
+    /// When the certificate should be renewed before it expires.
+    /// This is a duration string, e.g., "7d2h" for 7 days and 2 hours.
+    /// If not specified, defaults to 24 hours
     #[schemars(with = "Option<String>")]
     pub renew_before: Option<DurationString>,
+    /// Duration of the certificate
     #[schemars(with = "Option<String>")]
     pub renew_interval: Option<DurationString>,
 }
@@ -39,18 +61,28 @@ pub struct CertificateSpec {
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IssuerRef {
+    /// The name of the issuer, e.g., "router-cert"
     pub name: String,
+    /// The kind of the issuer, e.g., "Certificate".
+    /// Currently only "Certificate" is supported
     pub kind: String,
+    /// The namespace of the issuer
+    /// If not specified, the certificate's namespace will be used
     pub namespace: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CertificateStatus {
+    /// The status of the certificate key
     pub key: KeyStatus,
+    /// The status of the certificate cert file
     pub cert: CertStatus,
+    /// Indicates whether the key exists
     pub key_exists: bool,
+    /// Indicates whether the cert exists
     pub cert_exists: bool,
+    /// Indicates whether the certificate needs renewal
     pub needs_renewal: bool,
 }
 
@@ -58,7 +90,9 @@ pub struct CertificateStatus {
 #[serde(rename_all = "camelCase")]
 pub struct KeyStatus {
     pub name: Option<String>,
+    /// The signature type of the key, e.g., "ECDSA"
     pub sig_type: Option<String>,
+    /// The name of the secret that contains the key data
     pub secret: Option<String>,
 }
 
@@ -66,11 +100,18 @@ pub struct KeyStatus {
 #[serde(rename_all = "camelCase")]
 pub struct CertStatus {
     pub name: Option<String>,
+    /// The signature type of the certificate, e.g., "ECDSA"
     pub sig_type: Option<String>,
+    /// The name of the signer key used to sign the certificate
     pub signer_key: Option<String>,
+    /// The time when the certificate was issued
     pub issued_at: Option<String>,
+    /// The time when the certificate is valid until
     pub valid_until: Option<String>,
+    /// The name of the secret that contains the certificate data.
+    /// This secret contains the certificate and the signer certificate
     pub secret: Option<String>,
+    /// Indicates whether the certificate is valid
     pub valid: bool,
 }
 
