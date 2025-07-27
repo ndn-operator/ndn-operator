@@ -9,25 +9,50 @@ spec:
     kind: Certificate
     plural: certificates
     shortNames:
-    - ndncert
+    - cert
     singular: certificate
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
+  - additionalPrinterColumns:
+    - jsonPath: .spec.prefix
+      name: Prefix
+      type: string
+    - jsonPath: .status.key.name
+      name: Key
+      type: string
+    - jsonPath: .status.cert.name
+      name: Cert
+      type: string
+    - jsonPath: .status.cert.valid
+      name: Valid
+      type: boolean
+    - jsonPath: .status.keyExists
+      name: Key Exists
+      type: boolean
+    - jsonPath: .status.certExists
+      name: Cert Exists
+      type: boolean
+    - jsonPath: .status.needsRenewal
+      name: Needs Renewal
+      type: boolean
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Auto-generated derived type for CertificateSpec via `CustomResource`
+        description: Certificate is a custom resource for managing NDN certificates
         properties:
           spec:
             properties:
               issuer:
+                description: The issuer of the certificate, which can be another Certificate or an external issuer. Can reference itself if the certificate is self-signed
                 properties:
                   kind:
+                    description: The kind of the issuer, e.g., "Certificate". Currently only "Certificate" is supported
                     type: string
                   name:
+                    description: The name of the issuer, e.g., "router-cert"
                     type: string
                   namespace:
+                    description: The namespace of the issuer If not specified, the certificate's namespace will be used
                     nullable: true
                     type: string
                 required:
@@ -35,11 +60,14 @@ spec:
                 - name
                 type: object
               prefix:
+                description: The prefix for the certificate, used for routing and naming conventions
                 type: string
               renewBefore:
+                description: When the certificate should be renewed before it expires. This is a duration string, e.g., "7d2h" for 7 days and 2 hours. If not specified, defaults to 24 hours
                 nullable: true
                 type: string
               renewInterval:
+                description: Duration of the certificate
                 nullable: true
                 type: string
             required:
@@ -50,47 +78,60 @@ spec:
             nullable: true
             properties:
               cert:
+                description: The status of the certificate cert file
                 properties:
                   issuedAt:
+                    description: The time when the certificate was issued
                     nullable: true
                     type: string
                   name:
                     nullable: true
                     type: string
                   secret:
+                    description: The name of the secret that contains the certificate data. This secret contains the certificate and the signer certificate
                     nullable: true
                     type: string
                   sigType:
+                    description: The signature type of the certificate, e.g., "ECDSA"
                     nullable: true
                     type: string
                   signerKey:
+                    description: The name of the signer key used to sign the certificate
                     nullable: true
                     type: string
                   valid:
+                    description: Indicates whether the certificate is valid
                     type: boolean
                   validUntil:
+                    description: The time when the certificate is valid until
                     nullable: true
                     type: string
                 required:
                 - valid
                 type: object
               certExists:
+                description: Indicates whether the cert exists
                 type: boolean
               key:
+                description: The status of the certificate key
                 properties:
                   name:
                     nullable: true
                     type: string
                   secret:
+                    description: The name of the secret that contains the key data
                     nullable: true
                     type: string
                   sigType:
+                    description: The signature type of the key, e.g., "ECDSA"
                     nullable: true
                     type: string
                 type: object
               keyExists:
+                description: Indicates whether the key exists
                 type: boolean
               needsRenewal:
+                description: Indicates whether the certificate needs renewal
                 type: boolean
             required:
             - cert
