@@ -13,16 +13,30 @@ spec:
     singular: network
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
+  - additionalPrinterColumns:
+    - jsonPath: .spec.prefix
+      name: Prefix
+      type: string
+    - jsonPath: .spec.udpUnicastPort
+      name: UDP Unicast Port
+      type: integer
+    - jsonPath: .spec.routerCertIssuer.name
+      name: Cert Issuer
+      type: string
+    - jsonPath: .status.dsCreated
+      name: DaemonSet Created
+      type: boolean
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Auto-generated derived type for NetworkSpec via `CustomResource`
+        description: Network represents a Named Data Networking (NDN) network in Kubernetes
         properties:
           spec:
             properties:
               ndnd:
-                nullable: true
+                default:
+                  image: ghcr.io/named-data/ndnd:latest
+                description: The NDND image to use for the network controller
                 properties:
                   image:
                     type: string
@@ -32,9 +46,11 @@ spec:
               nodeSelector:
                 additionalProperties:
                   type: string
+                description: The node selector for the network, used to schedule the network controller on specific nodes
                 nullable: true
                 type: object
               operator:
+                description: The operator image to use for the network controller. If not specified, the operator will use its own image
                 nullable: true
                 properties:
                   image:
@@ -43,15 +59,20 @@ spec:
                 - image
                 type: object
               prefix:
+                description: The prefix for the network, used for routing and naming conventions. This should be a valid NDN prefix, e.g., "/example/network"
                 type: string
               routerCertIssuer:
+                description: The certificate issuer for the router certificates. If not specified, the network will be insecure (no certificates)
                 nullable: true
                 properties:
                   kind:
+                    description: The kind of the issuer, e.g., "Certificate". Currently only "Certificate" is supported
                     type: string
                   name:
+                    description: The name of the issuer, e.g., "router-cert"
                     type: string
                   namespace:
+                    description: The namespace of the issuer If not specified, the certificate's namespace will be used
                     nullable: true
                     type: string
                 required:
@@ -59,13 +80,17 @@ spec:
                 - name
                 type: object
               trustAnchors:
+                description: The trust anchors for the network, used for validating certificates
                 items:
                   properties:
                     kind:
+                      description: The kind of the trust anchor, e.g., "Certificate". Currently only "Certificate" is supported
                       type: string
                     name:
+                      description: The name of the trust anchor, e.g., "router-cert"
                       type: string
                     namespace:
+                      description: The namespace of the trust anchor. If not specified, the network's namespace will be used
                       nullable: true
                       type: string
                   required:
@@ -75,6 +100,7 @@ spec:
                 nullable: true
                 type: array
               udpUnicastPort:
+                description: The UDP unicast port for the nodes. Must be unique across all networks in the cluster.
                 format: int32
                 type: integer
             required:
@@ -85,6 +111,7 @@ spec:
             nullable: true
             properties:
               dsCreated:
+                description: Indicates whether the DaemonSet for the network has been created
                 nullable: true
                 type: boolean
             type: object

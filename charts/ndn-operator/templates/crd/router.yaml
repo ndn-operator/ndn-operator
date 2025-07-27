@@ -13,28 +13,48 @@ spec:
     singular: router
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
+  - additionalPrinterColumns:
+    - jsonPath: .status.online
+      name: Online
+      type: boolean
+    - jsonPath: .status.initialized
+      name: Initialized
+      type: boolean
+    - jsonPath: .spec.prefix
+      name: Prefix
+      type: string
+    - jsonPath: .spec.nodeName
+      name: Node
+      type: string
+    - jsonPath: .spec.cert.name
+      name: Certificate
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Auto-generated derived type for RouterSpec via `CustomResource`
+        description: Router represents a Named Data Networking (NDN) router in Kubernetes
         properties:
           spec:
             properties:
               cert:
+                description: The certificate for the router. If not specified, the router will be insecure (no certificates)
                 nullable: true
                 properties:
                   name:
+                    description: The name of the certificate, e.g., "router-cert"
                     type: string
                   namespace:
+                    description: Namespace of the certificate. If not specified, the router's namespace will be used
                     nullable: true
                     type: string
                 required:
                 - name
                 type: object
               nodeName:
+                description: The name of the node where the router is running
                 type: string
               prefix:
+                description: The prefix for the router, used for routing and naming conventions. This should be a valid NDN prefix, e.g., "/example/router"
                 type: string
             required:
             - nodeName
@@ -45,6 +65,7 @@ spec:
             properties:
               faces:
                 default: {}
+                description: The status of the router faces
                 properties:
                   tcp4:
                     nullable: true
@@ -61,14 +82,17 @@ spec:
                 type: object
               initialized:
                 default: false
+                description: Router init container is complete
                 type: boolean
               neighbors:
                 default: []
+                description: List of the neighbor routers' faces
                 items:
                   type: string
                 type: array
               online:
                 default: false
+                description: Router is online and ready to serve
                 type: boolean
             type: object
         required:

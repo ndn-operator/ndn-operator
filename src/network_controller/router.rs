@@ -26,11 +26,29 @@ pub static ROUTER_MANAGER_NAME: &str = "router-controller";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[kube(group = "named-data.net", version = "v1alpha1", kind = "Router", derive="Default", namespaced, shortname = "rt")]
-#[kube(status = "RouterStatus")]
+#[kube(
+    group = "named-data.net",
+    version = "v1alpha1",
+    kind = "Router",
+    derive="Default",
+    namespaced,
+    shortname = "rt",
+    doc = "Router represents a Named Data Networking (NDN) router in Kubernetes",
+    printcolumn = r#"{"name":"Online","jsonPath":".status.online","type":"boolean"}"#,
+    printcolumn = r#"{"name":"Initialized","jsonPath":".status.initialized","type":"boolean"}"#,
+    printcolumn = r#"{"name":"Prefix","jsonPath":".spec.prefix","type":"string"}"#,
+    printcolumn = r#"{"name":"Node","jsonPath":".spec.nodeName","type":"string"}"#,
+    printcolumn = r#"{"name":"Certificate","jsonPath":".spec.cert.name","type":"string"}"#,
+    status = "RouterStatus",
+)]
 pub struct RouterSpec {
+    /// The prefix for the router, used for routing and naming conventions.
+    /// This should be a valid NDN prefix, e.g., "/example/router"
     pub prefix: String,
+    /// The name of the node where the router is running
     pub node_name: String,
+    /// The certificate for the router.
+    /// If not specified, the router will be insecure (no certificates)
     pub cert: Option<CertificateRef>,
 }
 
@@ -39,9 +57,13 @@ pub struct RouterSpec {
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
 pub struct RouterStatus {
+    /// Router init container is complete
     pub initialized: bool,
+    /// Router is online and ready to serve
     pub online: bool,
+    /// The status of the router faces
     pub faces: RouterFaces,
+    /// List of the neighbor routers' faces
     pub neighbors: BTreeSet<String>,
 }
 
@@ -49,7 +71,10 @@ pub struct RouterStatus {
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CertificateRef {
+    /// The name of the certificate, e.g., "router-cert"
     pub name: String,
+    /// Namespace of the certificate.
+    /// If not specified, the router's namespace will be used
     pub namespace: Option<String>,
 }
 

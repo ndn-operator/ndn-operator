@@ -4,6 +4,8 @@
 [![Rust Report Card](https://rust-reportcard.xuri.me/badge/github.com/ndn-operator/ndn-operator)](https://rust-reportcard.xuri.me/report/github.com/ndn-operator/ndn-operator)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ndn-operator/ndn-operator/docker-push.yaml)
 
+[![CRD Reference](https://img.shields.io/badge/CRD%20Reference-blue?logo=kubernetes&logoColor=white&color=%23326CE5&link=https%3A%2F%2Fdoc.crds.dev%2Fgithub.com%2Fndn-operator%2Fndn-operator)](https://doc.crds.dev/github.com/ndn-operator/ndn-operator)
+
 **NDN Operator** is a Kubernetes operator that integrates [Named Data Networking](https://github.com/named-data) into your Kubernetes cluster
 
 ## Install

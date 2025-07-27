@@ -38,15 +38,39 @@ pub static HOST_KEYS_ROOT_DIR: &str = "/etc/ndn/keys";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[kube(group = "named-data.net", version = "v1alpha1", kind = "Network", derive="Default", namespaced, shortname = "nw")]
-#[kube(status = "NetworkStatus")]
+#[kube(
+    group = "named-data.net",
+    version = "v1alpha1",
+    kind = "Network",
+    derive="Default",
+    namespaced,
+    shortname = "nw",
+    doc = "Network represents a Named Data Networking (NDN) network in Kubernetes",
+    printcolumn = r#"{"name":"Prefix","jsonPath":".spec.prefix","type":"string"}"#,
+    printcolumn = r#"{"name":"UDP Unicast Port","jsonPath":".spec.udpUnicastPort","type":"integer"}"#,
+    printcolumn = r#"{"name":"Cert Issuer","jsonPath":".spec.routerCertIssuer.name","type":"string"}"#,
+    printcolumn = r#"{"name":"DaemonSet Created","jsonPath":".status.dsCreated","type":"boolean"}"#,
+    status = "NetworkStatus"
+)]
 pub struct NetworkSpec {
+    /// The prefix for the network, used for routing and naming conventions.
+    /// This should be a valid NDN prefix, e.g., "/example/network"
     pub prefix: String,
+    /// The UDP unicast port for the nodes.
+    /// Must be unique across all networks in the cluster.
     pub udp_unicast_port: i32,
+    /// The node selector for the network, used to schedule the network controller on specific nodes
     pub node_selector: Option<BTreeMap<String, String>>,
-    pub ndnd: Option<NdndSpec>,
+    /// The NDND image to use for the network controller
+    #[serde(default = "NdndSpec::default")]
+    pub ndnd: NdndSpec,
+    /// The operator image to use for the network controller.
+    /// If not specified, the operator will use its own image
     pub operator: Option<OperatorSpec>,
+    /// The certificate issuer for the router certificates.
+    /// If not specified, the network will be insecure (no certificates)
     pub router_cert_issuer: Option<IssuerRef>,
+    /// The trust anchors for the network, used for validating certificates
     pub trust_anchors: Option<Vec<TrustAnchorRef>>,
 }
 
@@ -54,8 +78,13 @@ pub struct NetworkSpec {
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TrustAnchorRef {
+    /// The name of the trust anchor, e.g., "router-cert"
     pub name: String,
+    /// The kind of the trust anchor, e.g., "Certificate".
+    /// Currently only "Certificate" is supported
     pub kind: String,
+    /// The namespace of the trust anchor.
+    /// If not specified, the network's namespace will be used
     pub namespace: Option<String>,
 }
 
@@ -114,6 +143,7 @@ impl Default for OperatorSpec {
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkStatus {
+    /// Indicates whether the DaemonSet for the network has been created
     ds_created: Option<bool>,
 }
 
@@ -454,7 +484,7 @@ impl Network {
                         }]),
                         containers: vec![Container {
                             name: "network".to_string(),
-                            image: Some(self.spec.ndnd.clone().unwrap_or_default().image),
+                            image: Some(self.spec.ndnd.clone().image),
                             command: vec!["/ndnd".to_string()].into(),
                             args: Some(vec!["daemon".to_string(), container_config_path.to_string()]),
                             security_context: Some(SecurityContext {
