@@ -9,22 +9,33 @@ helm repo update
 helm install ndn-operator-crd ndn-operator/ndn-operator-crd
 helm install ndn-operator ndn-operator/ndn-operator
 ```
-## Create your first ndn network
+## Create secured ndn network
 
+### Namespace
 ```shell
 kubectl create ns mynetwork
-kubectl apply --namespace mynetwork \
-    -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/minimal/network.yaml
 ```
-
+### Self-signed certificate
+```
+kubectl apply --namespace mynetwork \
+    -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/secure/self-signed-cert.yaml
+```
+### Secured network
+```shell
+kubectl apply --namespace mynetwork \
+    -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/secure/network.yaml
+```
 ### Pingserver
 Producers and consumers may live in different k8s namespaces from the network, and from each other
+* Producer:
 ```shell
-kubectl apply -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/minimal/producer-pod.yaml
+kubectl apply \
+    -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/workloads/producer-pod.yaml
 ```
-
+* Consumer
 ```shell
-kubectl apply -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/minimal/consumer-job.yaml
+kubectl apply \
+    -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/workloads/consumer-job.yaml
 ```
 
 ## Architecture
@@ -63,9 +74,9 @@ flowchart LR
 1. Basic functionality ✅
     * `Network` resource that creates a simple unsecured network
     * Pod annotations, assigning it to a particular network
-1. TLS 🚧
+1. TLS ✅
     * Self-signed root CA
-1. Advanced use ⏳
+1. Advanced use 🚧
     * Expose NDN faces outside
     * Obtain certificates from Testbed
     * K8S resources to manage NDN faces, strategies and links
