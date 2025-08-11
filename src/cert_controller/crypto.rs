@@ -26,7 +26,8 @@ impl KeyInfo {
         }
         Ok(KeyInfo {
             name: name.ok_or_else(|| Error::OtherError("Could not parse key name".to_string()))?,
-            sig_type: sig_type.ok_or_else(|| Error::OtherError("Could not parse sig type".to_string()))?,
+            sig_type: sig_type
+                .ok_or_else(|| Error::OtherError("Could not parse sig type".to_string()))?,
             key_text,
         })
     }
@@ -81,8 +82,10 @@ impl CertInfo {
         }
         Ok(CertInfo {
             name: name.ok_or_else(|| Error::OtherError("Could not parse cert name".to_string()))?,
-            sig_type: sig_type.ok_or_else(|| Error::OtherError("Could not parse sig type".to_string()))?,
-            signer_key: signer_key.ok_or_else(|| Error::OtherError("Could not parse signer key".to_string()))?,
+            sig_type: sig_type
+                .ok_or_else(|| Error::OtherError("Could not parse sig type".to_string()))?,
+            signer_key: signer_key
+                .ok_or_else(|| Error::OtherError("Could not parse signer key".to_string()))?,
             validity,
             cert_text,
         })
@@ -105,19 +108,30 @@ pub fn generate_key(prefix: &str) -> Result<KeyInfo, Error> {
             String::from_utf8_lossy(&output.stderr)
         )));
     }
-    let key_text = String::from_utf8(output.stdout).map_err(|e| Error::OtherError(e.to_string()))?;
+    let key_text =
+        String::from_utf8(output.stdout).map_err(|e| Error::OtherError(e.to_string()))?;
     KeyInfo::from_key_text(key_text)
 }
 
-pub fn sign_cert(signer_key: &str, cert_key: &str, params: &SignCertParams) -> Result<CertInfo, Error> {
+pub fn sign_cert(
+    signer_key: &str,
+    cert_key: &str,
+    params: &SignCertParams,
+) -> Result<CertInfo, Error> {
     let ndnd_path: &str = option_env!("NDND_PATH").unwrap_or("/ndnd");
     let binding = env::var("TMP_DIR").unwrap_or("/tmp".to_string());
     let tmp_dir = Path::new(&binding);
     let mut temp_signer_key_file = NamedTempFile::new_in(tmp_dir).map_err(Error::IoError)?;
-    debug!("Temporary signer key file created: {:?}", temp_signer_key_file.path());
+    debug!(
+        "Temporary signer key file created: {:?}",
+        temp_signer_key_file.path()
+    );
     writeln!(temp_signer_key_file, "{signer_key}").map_err(Error::IoError)?;
     let mut temp_cert_key_file = NamedTempFile::new_in(tmp_dir).map_err(Error::IoError)?;
-    debug!("Temporary cert key file created: {:?}", temp_cert_key_file.path());
+    debug!(
+        "Temporary cert key file created: {:?}",
+        temp_cert_key_file.path()
+    );
     writeln!(temp_cert_key_file, "{cert_key}").map_err(Error::IoError)?;
 
     let mut args = vec![
@@ -137,8 +151,14 @@ pub fn sign_cert(signer_key: &str, cert_key: &str, params: &SignCertParams) -> R
         end_str = end.format("%Y%m%d%H%M%S").to_string();
         args.push(&end_str);
     }
-    if let Some(issuer) = &params.issuer { args.push("--issuer"); args.push(issuer); }
-    if let Some(info) = &params.info { args.push("--info"); args.push(info); }
+    if let Some(issuer) = &params.issuer {
+        args.push("--issuer");
+        args.push(issuer);
+    }
+    if let Some(info) = &params.info {
+        args.push("--info");
+        args.push(info);
+    }
     debug!("Running ndnd sec sign-cert with args: {:?}", args);
     let output = Command::new(ndnd_path)
         .args(&args)
@@ -152,6 +172,7 @@ pub fn sign_cert(signer_key: &str, cert_key: &str, params: &SignCertParams) -> R
             String::from_utf8_lossy(&output.stderr)
         )));
     }
-    let cert_text = String::from_utf8(output.stdout).map_err(|e| Error::OtherError(e.to_string()))?;
+    let cert_text =
+        String::from_utf8(output.stdout).map_err(|e| Error::OtherError(e.to_string()))?;
     CertInfo::from_cert_text(cert_text)
 }

@@ -1,4 +1,4 @@
-use operator::network_controller::{NetworkSpec, NdndSpec};
+use operator::network_controller::{NdndSpec, NetworkSpec};
 
 #[test]
 fn default_ndnd_image() {

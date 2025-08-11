@@ -1,7 +1,7 @@
+use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
-use kube::CustomResource;
 
 pub static CERTIFICATE_FINALIZER: &str = "certificate.named-data.net/finalizer";
 

@@ -38,8 +38,8 @@ pub enum Error {
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub mod cert_controller;
-pub mod helper;
 mod events_helper;
+pub mod helper;
 mod ndnd;
 pub mod network_controller;
 pub use crate::ndnd::*;
