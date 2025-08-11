@@ -33,4 +33,3 @@ pub struct Neighbor {
     pub uri: String,
     pub mtu: Option<u64>,
 }
-

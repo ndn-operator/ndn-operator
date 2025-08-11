@@ -1,8 +1,7 @@
-use tracing_subscriber::{prelude::*, EnvFilter, Registry};
+use tracing_subscriber::{EnvFilter, Registry, prelude::*};
 
 /// Initialize tracing
 pub async fn init() {
-
     let logger = tracing_subscriber::fmt::layer().json();
     let env_filter = EnvFilter::try_from_env("LOG")
         .or(EnvFilter::try_new("info"))

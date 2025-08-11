@@ -6,7 +6,7 @@ use kube::{
     runtime::{
         controller::{Action, Controller},
         events::{Recorder, Reporter},
-        finalizer::{finalizer, Event as Finalizer},
+        finalizer::{Event as Finalizer, finalizer},
         watcher,
     },
 };
@@ -15,9 +15,8 @@ use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
-use crate::{cert_controller::CERTIFICATE_FINALIZER, Error, Result};
 use super::Certificate;
-
+use crate::{Error, Result, cert_controller::CERTIFICATE_FINALIZER};
 
 // Context for our reconciler
 #[derive(Clone)]
@@ -35,12 +34,15 @@ async fn reconcile_cert(cert: Arc<Certificate>, ctx: Arc<Context>) -> Result<Act
     let api_cert: Api<Certificate> = Api::namespaced(ctx.client.clone(), &ns);
 
     info!("Reconciling Certificate \"{}\" in {}", cert.name_any(), ns);
-    finalizer(&api_cert, CERTIFICATE_FINALIZER, cert, async |event| {
-        match event {
+    finalizer(
+        &api_cert,
+        CERTIFICATE_FINALIZER,
+        cert,
+        async |event| match event {
             Finalizer::Apply(cert) => cert.reconcile(ctx.clone()).await,
             Finalizer::Cleanup(cert) => cert.cleanup(ctx.clone()).await,
-        }
-    })
+        },
+    )
     .await
     .map_err(|e| Error::FinalizerError(Box::new(e)))
 }
@@ -95,9 +97,10 @@ fn certificate_error_policy(_: Arc<Certificate>, error: &Error, _: Arc<Context>)
     Action::requeue(Duration::from_secs(5 * 60))
 }
 
-
 pub async fn run_cert(state: State) {
-    let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
+    let client = Client::try_default()
+        .await
+        .expect("Expected a valid KUBECONFIG environment variable");
     let api_cert = Api::<Certificate>::all(client.clone());
     if let Err(e) = api_cert.list(&ListParams::default().limit(1)).await {
         error!("Certificate CRD is not queryable; {e:?}. Is the CRD installed?");
@@ -106,8 +109,12 @@ pub async fn run_cert(state: State) {
     }
     Controller::new(api_cert, watcher::Config::default().any_semantic())
         .shutdown_on_signal()
-        .run(reconcile_cert, certificate_error_policy, state.to_context(client.clone()).await)
-        .filter_map(async |x| { std::result::Result::ok(x) })
-        .for_each(async |_| () ).await;
+        .run(
+            reconcile_cert,
+            certificate_error_policy,
+            state.to_context(client.clone()).await,
+        )
+        .filter_map(async |x| std::result::Result::ok(x))
+        .for_each(async |_| ())
+        .await;
 }
-

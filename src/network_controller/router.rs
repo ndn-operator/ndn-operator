@@ -1,21 +1,20 @@
-use std::{
-    collections::BTreeSet, sync::Arc
-};
+use std::{collections::BTreeSet, sync::Arc};
 
 // use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
+use json_patch::{Patch as JsonPatch, PatchOperation, ReplaceOperation, jsonptr::PointerBuf};
 use kube::{
+    Api, CustomResource, Resource, ResourceExt,
     api::{ListParams, Patch, PatchParams},
     core::Expression,
     runtime::{
         controller::Action,
-        events::{Event, EventType}, wait::Condition,
+        events::{Event, EventType},
+        wait::Condition,
     },
-    Api, CustomResource, Resource, ResourceExt,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
-use json_patch::{jsonptr::PointerBuf, Patch as JsonPatch, PatchOperation, ReplaceOperation};
 use tracing::*;
 
 use super::{Context, NETWORK_LABEL_KEY};
@@ -30,7 +29,7 @@ pub static ROUTER_MANAGER_NAME: &str = "router-controller";
     group = "named-data.net",
     version = "v1alpha1",
     kind = "Router",
-    derive="Default",
+    derive = "Default",
     namespaced,
     shortname = "rt",
     doc = "Router represents a Named Data Networking (NDN) router in Kubernetes",
@@ -39,7 +38,7 @@ pub static ROUTER_MANAGER_NAME: &str = "router-controller";
     printcolumn = r#"{"name":"Prefix","jsonPath":".spec.prefix","type":"string"}"#,
     printcolumn = r#"{"name":"Node","jsonPath":".spec.nodeName","type":"string"}"#,
     printcolumn = r#"{"name":"Certificate","jsonPath":".spec.cert.name","type":"string"}"#,
-    status = "RouterStatus",
+    status = "RouterStatus"
 )]
 pub struct RouterSpec {
     /// The prefix for the router, used for routing and naming conventions.
@@ -88,7 +87,6 @@ pub struct RouterFaces {
     pub tcp6: Option<String>,
 }
 
-
 impl RouterFaces {
     pub fn to_btree_set(&self) -> BTreeSet<String> {
         let mut faces = BTreeSet::new();
@@ -110,26 +108,35 @@ impl RouterFaces {
 
 impl Router {
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
-
         debug!("Reconciling router: {:?}", self);
         let my_status = self.status.clone().unwrap_or_default();
         // Proceed only if status.online is true
-        match &my_status.online{
+        match &my_status.online {
             true => {
-                debug!("Router {} is online, proceeding with reconciliation", self.name_any());
+                debug!(
+                    "Router {} is online, proceeding with reconciliation",
+                    self.name_any()
+                );
             }
             false => {
-                debug!("Router {} is offline, skipping reconciliation", self.name_any());
+                debug!(
+                    "Router {} is offline, skipping reconciliation",
+                    self.name_any()
+                );
                 return Ok(Action::await_change());
             }
         }
 
         // Update status.neighbors of all other routers in the network
         let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
-        let my_network_name = self.labels().get(NETWORK_LABEL_KEY).ok_or(Error::OtherError("Network label not found".to_owned()))?;
+        let my_network_name = self
+            .labels()
+            .get(NETWORK_LABEL_KEY)
+            .ok_or(Error::OtherError("Network label not found".to_owned()))?;
         let my_faces = my_status.faces.to_btree_set();
-        let lp = ListParams::default()
-            .labels_from(&Expression::Equal(NETWORK_LABEL_KEY.into(), my_network_name.into()).into());
+        let lp = ListParams::default().labels_from(
+            &Expression::Equal(NETWORK_LABEL_KEY.into(), my_network_name.into()).into(),
+        );
 
         // List all routers in the network, excluding self
         for router in api_router
@@ -150,20 +157,22 @@ impl Router {
             for face in &my_faces {
                 new_neighbors.insert(face.to_string());
             }
-            debug!("Router {} neighbors: {:?}", router.name_any(), new_neighbors);
-            let patches = vec![
-                PatchOperation::Replace(
-                    ReplaceOperation{
-                        path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
-                        value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
-                    }
-                )
-            ];
+            debug!(
+                "Router {} neighbors: {:?}",
+                router.name_any(),
+                new_neighbors
+            );
+            let patches = vec![PatchOperation::Replace(ReplaceOperation {
+                path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
+                value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
+            })];
             let patch = Patch::Json::<()>(JsonPatch(patches));
             info!("Updating neigbors of router {}...", router.name_any());
             debug!("Status patch: {:?}", patch);
             let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-            let _ = api_router.patch_status(&router.name_any(), &serverside, &patch).await
+            let _ = api_router
+                .patch_status(&router.name_any(), &serverside, &patch)
+                .await
                 .map_err(Error::KubeError)?;
 
             ctx.recorder
@@ -198,12 +207,13 @@ impl Router {
     }
 
     pub async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action> {
-
         // Update status.neighbors of all other routers in the network
         let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
-        let my_network_name = self.labels().get(NETWORK_LABEL_KEY).ok_or(Error::OtherError("Network label not found".to_owned()))?;
-        let lp = ListParams::default()
-            .labels(&format!("{NETWORK_LABEL_KEY}={my_network_name}"));
+        let my_network_name = self
+            .labels()
+            .get(NETWORK_LABEL_KEY)
+            .ok_or(Error::OtherError("Network label not found".to_owned()))?;
+        let lp = ListParams::default().labels(&format!("{NETWORK_LABEL_KEY}={my_network_name}"));
         let my_status = self.status.clone().unwrap_or_default();
         let my_faces = my_status.faces.to_btree_set();
         for router in api_router
@@ -222,20 +232,22 @@ impl Router {
             for face in &my_faces {
                 new_neighbors.remove(&face.to_string());
             }
-            debug!("Router {} neighbors: {:?}", router.name_any(), new_neighbors);
-            let patches = vec![
-                PatchOperation::Replace(
-                    ReplaceOperation{
-                        path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
-                        value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
-                    }
-                )
-            ];
+            debug!(
+                "Router {} neighbors: {:?}",
+                router.name_any(),
+                new_neighbors
+            );
+            let patches = vec![PatchOperation::Replace(ReplaceOperation {
+                path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
+                value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
+            })];
             let patch = Patch::Json::<()>(JsonPatch(patches));
             info!("Updating neigbors of router {}...", router.name_any());
             debug!("Status patch: {:?}", patch);
             let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-            let _ = api_router.patch_status(&router.name_any(), &serverside, &patch).await
+            let _ = api_router
+                .patch_status(&router.name_any(), &serverside, &patch)
+                .await
                 .map_err(Error::KubeError)?;
             ctx.recorder
                 .publish(
@@ -271,16 +283,14 @@ impl Router {
 }
 
 pub fn is_router_created() -> impl Condition<Router> {
-    |obj: Option<&Router>| {
-        obj.is_some()
-    }
+    |obj: Option<&Router>| obj.is_some()
 }
 
 pub fn is_router_online() -> impl Condition<Router> {
     |obj: Option<&Router>| {
         if let Some(router) = obj {
             if let Some(status) = &router.status {
-                return status.online
+                return status.online;
             }
         }
         false
@@ -291,7 +301,7 @@ pub fn is_router_initialized() -> impl Condition<Router> {
     |obj: Option<&Router>| {
         if let Some(router) = obj {
             if let Some(status) = &router.status {
-                return status.initialized
+                return status.initialized;
             }
         }
         false
