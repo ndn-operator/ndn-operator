@@ -1,6 +1,7 @@
 use std::{collections::BTreeSet, sync::Arc};
 
 // use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
+use crate::events_helper::emit_info;
 use json_patch::{Patch as JsonPatch, PatchOperation, ReplaceOperation, jsonptr::PointerBuf};
 use kube::{
     Api, CustomResource, Resource, ResourceExt,
@@ -175,19 +176,14 @@ impl Router {
                 .await
                 .map_err(Error::KubeError)?;
 
-            ctx.recorder
-                .publish(
-                    &Event {
-                        type_: EventType::Normal,
-                        reason: "NeighborsInserted".into(),
-                        note: Some(format!("From `{}` Router", self.name_any())),
-                        action: "Updated".into(),
-                        secondary: None,
-                    },
-                    &router.object_ref(&()),
-                )
-                .await
-                .map_err(Error::KubeError)?;
+            emit_info(
+                &ctx.recorder,
+                router,
+                "NeighborsInserted",
+                "Updated",
+                Some(format!("From `{}` Router", self.name_any())),
+            )
+            .await;
         }
         // Publish event
         ctx.recorder
@@ -249,19 +245,14 @@ impl Router {
                 .patch_status(&router.name_any(), &serverside, &patch)
                 .await
                 .map_err(Error::KubeError)?;
-            ctx.recorder
-                .publish(
-                    &Event {
-                        type_: EventType::Normal,
-                        reason: "NeighborsRemoved".into(),
-                        note: Some(format!("From `{}` Router", self.name_any())),
-                        action: "Updated".into(),
-                        secondary: None,
-                    },
-                    &router.object_ref(&()),
-                )
-                .await
-                .map_err(Error::KubeError)?;
+            emit_info(
+                &ctx.recorder,
+                router,
+                "NeighborsRemoved",
+                "Updated",
+                Some(format!("From `{}` Router", self.name_any())),
+            )
+            .await;
         }
 
         // Publish event

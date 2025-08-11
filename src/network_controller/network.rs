@@ -2,6 +2,7 @@ use super::Context;
 use crate::{
     Error, Result,
     cert_controller::{Certificate, CertificateSpec, IssuerRef, is_cert_valid},
+    events_helper::emit_info,
     helper::get_my_image,
     network_controller::{CertificateRef, Router, RouterSpec},
 };
@@ -168,7 +169,7 @@ impl Default for OperatorSpec {
 #[serde(rename_all = "camelCase")]
 pub struct NetworkStatus {
     /// Indicates whether the DaemonSet for the network has been created
-    ds_created: Option<bool>,
+    pub ds_created: Option<bool>,
 }
 
 impl Network {
@@ -216,23 +217,18 @@ impl Network {
             .await
             .map_err(Error::KubeError)?;
         // Publish event
-        ctx.recorder
-            .publish(
-                &Event {
-                    type_: EventType::Normal,
-                    reason: "DaemonSetCreated".into(),
-                    note: Some(format!(
-                        "Created `{}` DaemonSet for `{}` Network",
-                        ds.name_any(),
-                        self.name_any()
-                    )),
-                    action: "Created".into(),
-                    secondary: None,
-                },
-                &self.object_ref(&()),
-            )
-            .await
-            .map_err(Error::KubeError)?;
+        emit_info(
+            &ctx.recorder,
+            self,
+            "DaemonSetCreated",
+            "Created",
+            Some(format!(
+                "Created `{}` DaemonSet for `{}` Network",
+                ds.name_any(),
+                self.name_any()
+            )),
+        )
+        .await;
         // Update the status of the Network
         let status = json!({
             "status": NetworkStatus {
@@ -261,6 +257,14 @@ impl Network {
             )
             .await
             .map_err(Error::KubeError)?;
+        emit_info(
+            &ctx.recorder,
+            self,
+            "DeleteRequested",
+            "Deleting",
+            Some(format!("Delete `{}`", self.name_any())),
+        )
+        .await;
         Ok(Action::await_change())
     }
 
