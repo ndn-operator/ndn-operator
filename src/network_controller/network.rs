@@ -9,15 +9,11 @@ use crate::{
 use duration_string::DurationString;
 use k8s_openapi::{
     api::{
-        apps::v1::{DaemonSet, DaemonSetSpec},
-        core::v1::{
-            Container, ContainerPort, EnvVar, EnvVarSource, HostPathVolumeSource,
-            ObjectFieldSelector, PodSpec, PodTemplateSpec, SecurityContext, ServiceAccount, Volume,
-            VolumeMount,
-        },
+        apps::v1::DaemonSet,
+        core::v1::ServiceAccount,
         rbac::v1::{PolicyRule, Role, RoleBinding, RoleRef, Subject},
     },
-    apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta},
+    apimachinery::pkg::apis::meta::v1::ObjectMeta,
 };
 use kube::{
     Client, CustomResource, Resource,
@@ -193,7 +189,11 @@ impl Network {
                 .ok()
                 .unwrap_or(OperatorSpec::default().image),
         };
-        let ds_data = self.create_owned_daemonset(Some(ds_image), Some(sa_data.name_any()))?;
+        let ds_data = super::daemonset::create_owned_daemonset(
+            self,
+            Some(ds_image),
+            Some(sa_data.name_any()),
+        )?;
         // Create ServiceAccount
         let _sa = api_sa
             .patch(&self.name_any(), &serverside, &Patch::Apply(sa_data))
@@ -398,275 +398,6 @@ impl Network {
                 ..Subject::default()
             }]),
         }
-    }
-
-    fn create_owned_daemonset(
-        &self,
-        image: Option<String>,
-        service_account: Option<String>,
-    ) -> Result<DaemonSet> {
-        let oref = self.controller_owner_ref(&()).ok_or(Error::OtherError(
-            "Failed to create owner reference".to_string(),
-        ))?;
-        let mut labels = BTreeMap::new();
-        labels.insert(DS_LABEL_KEY.to_string(), self.name_any());
-        let container_config_path = self.container_config_path();
-        let container_socket_path = self.container_socket_path();
-        let daemonset = DaemonSet {
-            metadata: ObjectMeta {
-                name: Some(self.name_any()),
-                owner_references: Some(vec![oref]),
-                labels: Some(labels.clone()),
-                ..ObjectMeta::default()
-            },
-            spec: Some(DaemonSetSpec {
-                selector: LabelSelector {
-                    match_labels: Some(labels.clone()),
-                    ..LabelSelector::default()
-                },
-                template: PodTemplateSpec {
-                    metadata: Some(ObjectMeta {
-                        labels: Some(labels.clone()),
-                        ..ObjectMeta::default()
-                    }),
-                    spec: Some(PodSpec {
-                        service_account_name: service_account,
-                        host_network: Some(true),
-                        dns_policy: Some("ClusterFirstWithHostNet".to_string()),
-                        node_selector: self.spec.node_selector.clone(),
-                        init_containers: Some(vec![Container {
-                            name: "init".to_string(),
-                            image: image.clone(),
-                            command: vec![
-                                "/init".to_string(),
-                                "--output".to_string(),
-                                container_config_path.clone(),
-                            ]
-                            .into(),
-                            env: Some(vec![
-                                EnvVar {
-                                    name: "NDN_NETWORK_NAME".to_string(),
-                                    value: Some(self.name_any()),
-                                    ..EnvVar::default()
-                                },
-                                EnvVar {
-                                    name: "NDN_UDP_UNICAST_PORT".to_string(),
-                                    value: Some(self.spec.udp_unicast_port.to_string()),
-                                    ..EnvVar::default()
-                                },
-                                EnvVar {
-                                    name: "LOG".to_string(),
-                                    value: Some("debug".to_string()),
-                                    ..EnvVar::default()
-                                },
-                                EnvVar {
-                                    name: "NDN_NETWORK_NAMESPACE".to_string(),
-                                    value_from: Some(EnvVarSource {
-                                        field_ref: Some(ObjectFieldSelector {
-                                            field_path: "metadata.namespace".to_string(),
-                                            ..ObjectFieldSelector::default()
-                                        }),
-                                        ..EnvVarSource::default()
-                                    }),
-                                    ..EnvVar::default()
-                                },
-                                EnvVar {
-                                    // Router name is equal to the pod name (pod_sync.rs#pod_apply)
-                                    // TODO: use annotations?
-                                    name: "NDN_ROUTER_NAME".to_string(),
-                                    value_from: Some(EnvVarSource {
-                                        field_ref: Some(ObjectFieldSelector {
-                                            field_path: "metadata.name".to_string(),
-                                            ..ObjectFieldSelector::default()
-                                        }),
-                                        ..EnvVarSource::default()
-                                    }),
-                                    ..EnvVar::default()
-                                },
-                                EnvVar {
-                                    name: "NDN_NODE_NAME".to_string(),
-                                    value_from: Some(EnvVarSource {
-                                        field_ref: Some(ObjectFieldSelector {
-                                            field_path: "spec.nodeName".to_string(),
-                                            ..ObjectFieldSelector::default()
-                                        }),
-                                        ..EnvVarSource::default()
-                                    }),
-                                    ..EnvVar::default()
-                                },
-                                EnvVar {
-                                    name: "NDN_SOCKET_PATH".to_string(),
-                                    value: Some(container_socket_path.clone()),
-                                    ..EnvVar::default()
-                                },
-                                EnvVar {
-                                    name: "NDN_KEYS_DIR".to_string(),
-                                    value: Some(self.container_keys_dir()),
-                                    ..EnvVar::default()
-                                },
-                                EnvVar {
-                                    name: "NDN_INSECURE".to_string(),
-                                    value: match self.spec.router_cert_issuer {
-                                        Some(_) => Some("false".to_string()),
-                                        None => Some("true".to_string()),
-                                    },
-                                    ..EnvVar::default()
-                                },
-                            ]),
-                            security_context: Some(SecurityContext {
-                                privileged: Some(true),
-                                ..SecurityContext::default()
-                            }),
-                            volume_mounts: Some(vec![
-                                VolumeMount {
-                                    name: "config".to_string(),
-                                    mount_path: CONTAINER_CONFIG_DIR.to_string(),
-                                    read_only: Some(false),
-                                    ..VolumeMount::default()
-                                },
-                                VolumeMount {
-                                    name: "keys".to_string(),
-                                    mount_path: CONTAINER_KEYS_DIR.to_string(),
-                                    read_only: Some(false),
-                                    ..VolumeMount::default()
-                                },
-                            ]),
-                            ..Container::default()
-                        }]),
-                        containers: vec![
-                            Container {
-                                name: "network".to_string(),
-                                image: Some(self.spec.ndnd.clone().image),
-                                command: vec!["/ndnd".to_string()].into(),
-                                args: Some(vec![
-                                    "daemon".to_string(),
-                                    container_config_path.to_string(),
-                                ]),
-                                security_context: Some(SecurityContext {
-                                    privileged: Some(true),
-                                    ..SecurityContext::default()
-                                }),
-                                ports: Some(vec![ContainerPort {
-                                    container_port: self.spec.udp_unicast_port,
-                                    host_port: Some(self.spec.udp_unicast_port),
-                                    protocol: Some("UDP".to_string()),
-                                    ..ContainerPort::default()
-                                }]),
-                                env: Some(vec![EnvVar {
-                                    name: "NDN_CLIENT_TRANSPORT".to_string(),
-                                    value: Some(format!(
-                                        "unix://{}",
-                                        container_socket_path.clone()
-                                    )),
-                                    ..EnvVar::default()
-                                }]),
-                                volume_mounts: Some(vec![
-                                    VolumeMount {
-                                        name: "config".to_string(),
-                                        mount_path: CONTAINER_CONFIG_DIR.to_string(),
-                                        read_only: Some(true),
-                                        ..VolumeMount::default()
-                                    },
-                                    VolumeMount {
-                                        name: "run-ndnd".to_string(),
-                                        mount_path: CONTAINER_SOCKET_DIR.to_string(),
-                                        ..VolumeMount::default()
-                                    },
-                                    VolumeMount {
-                                        name: "keys".to_string(),
-                                        mount_path: CONTAINER_KEYS_DIR.to_string(),
-                                        read_only: Some(true),
-                                        ..VolumeMount::default()
-                                    },
-                                ]),
-                                ..Container::default()
-                            },
-                            Container {
-                                name: "watch".to_string(),
-                                image,
-                                command: vec!["/sidecar".to_string()].into(),
-                                env: Some(vec![
-                                    EnvVar {
-                                        name: "NDN_NETWORK_NAME".to_string(),
-                                        value: Some(self.name_any()),
-                                        ..EnvVar::default()
-                                    },
-                                    EnvVar {
-                                        name: "LOG".to_string(),
-                                        value: Some("debug".to_string()),
-                                        ..EnvVar::default()
-                                    },
-                                    EnvVar {
-                                        name: "NDN_NETWORK_NAMESPACE".to_string(),
-                                        value_from: Some(EnvVarSource {
-                                            field_ref: Some(ObjectFieldSelector {
-                                                field_path: "metadata.namespace".to_string(),
-                                                ..ObjectFieldSelector::default()
-                                            }),
-                                            ..EnvVarSource::default()
-                                        }),
-                                        ..EnvVar::default()
-                                    },
-                                    EnvVar {
-                                        // Router name is equal to the pod name (pod_sync.rs#pod_apply)
-                                        name: "NDN_ROUTER_NAME".to_string(),
-                                        value_from: Some(EnvVarSource {
-                                            field_ref: Some(ObjectFieldSelector {
-                                                field_path: "metadata.name".to_string(),
-                                                ..ObjectFieldSelector::default()
-                                            }),
-                                            ..EnvVarSource::default()
-                                        }),
-                                        ..EnvVar::default()
-                                    },
-                                    EnvVar {
-                                        name: "NDN_CLIENT_TRANSPORT".to_string(),
-                                        value: Some(format!("unix://{container_socket_path}")),
-                                        ..EnvVar::default()
-                                    },
-                                ]),
-                                volume_mounts: Some(vec![VolumeMount {
-                                    name: "run-ndnd".to_string(),
-                                    mount_path: CONTAINER_SOCKET_DIR.to_string(),
-                                    ..VolumeMount::default()
-                                }]),
-                                ..Container::default()
-                            },
-                        ],
-                        volumes: Some(vec![
-                            Volume {
-                                name: "config".to_string(),
-                                host_path: Some(HostPathVolumeSource {
-                                    path: self.host_config_dir(),
-                                    type_: Some("DirectoryOrCreate".to_string()),
-                                }),
-                                ..Volume::default()
-                            },
-                            Volume {
-                                name: "run-ndnd".to_string(),
-                                host_path: Some(HostPathVolumeSource {
-                                    path: self.host_socket_dir(),
-                                    type_: Some("DirectoryOrCreate".to_string()),
-                                }),
-                                ..Volume::default()
-                            },
-                            Volume {
-                                name: "keys".to_string(),
-                                host_path: Some(HostPathVolumeSource {
-                                    path: self.host_keys_dir(),
-                                    type_: Some("DirectoryOrCreate".to_string()),
-                                }),
-                                ..Volume::default()
-                            },
-                        ]),
-                        ..PodSpec::default()
-                    }),
-                },
-                ..DaemonSetSpec::default()
-            }),
-            ..Default::default()
-        };
-        Ok(daemonset)
     }
 
     pub fn create_owned_router(
