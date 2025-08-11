@@ -4,6 +4,7 @@ use crate::{
     cert_controller::{Certificate, CertificateSpec, IssuerRef, is_cert_valid},
     helper::get_my_image,
     network_controller::{CertificateRef, Router, RouterSpec},
+    events_helper::emit_info,
 };
 use duration_string::DurationString;
 use k8s_openapi::{
@@ -216,23 +217,13 @@ impl Network {
             .await
             .map_err(Error::KubeError)?;
         // Publish event
-        ctx.recorder
-            .publish(
-                &Event {
-                    type_: EventType::Normal,
-                    reason: "DaemonSetCreated".into(),
-                    note: Some(format!(
-                        "Created `{}` DaemonSet for `{}` Network",
-                        ds.name_any(),
-                        self.name_any()
-                    )),
-                    action: "Created".into(),
-                    secondary: None,
-                },
-                &self.object_ref(&()),
-            )
-            .await
-            .map_err(Error::KubeError)?;
+            emit_info(
+                &ctx.recorder,
+                self,
+                "DaemonSetCreated",
+                "Created",
+                Some(format!("Created `{}` DaemonSet for `{}` Network", ds.name_any(), self.name_any())),
+            ).await;
         // Update the status of the Network
         let status = json!({
             "status": NetworkStatus {
@@ -261,6 +252,13 @@ impl Network {
             )
             .await
             .map_err(Error::KubeError)?;
+            emit_info(
+                &ctx.recorder,
+                self,
+                "DeleteRequested",
+                "Deleting",
+                Some(format!("Delete `{}`", self.name_any())),
+            ).await;
         Ok(Action::await_change())
     }
 

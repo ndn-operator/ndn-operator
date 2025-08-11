@@ -28,6 +28,9 @@ pub enum Error {
     #[error("Missing Annotation: {0}")]
     MissingAnnotation(String),
 
+    #[error("Validation Error: {0}")]
+    ValidationError(String),
+
     /// NB: this is a catch-all for any other errors
     #[error("Other Error: {0}")]
     OtherError(String),
@@ -36,9 +39,11 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub mod cert_controller;
 pub mod helper;
+mod events_helper;
 mod ndnd;
 pub mod network_controller;
 pub use crate::ndnd::*;
+pub use events_helper::*;
 
 /// Log and trace integrations
 pub mod telemetry;
