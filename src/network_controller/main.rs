@@ -8,7 +8,7 @@ use kube::{
     runtime::{
         controller::{Action, Controller},
         events::{Recorder, Reporter},
-        finalizer::{finalizer, Event as Finalizer},
+        finalizer::{Event as Finalizer, finalizer},
         watcher,
     },
 };
@@ -17,9 +17,10 @@ use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
-use super::{pod_apply, pod_cleanup, Network, Router, DS_LABEL_KEY, NETWORK_FINALIZER, ROUTER_FINALIZER};
-use crate::{network_controller::POD_FINALIZER, Error, Result};
-
+use super::{
+    DS_LABEL_KEY, NETWORK_FINALIZER, Network, ROUTER_FINALIZER, Router, pod_apply, pod_cleanup,
+};
+use crate::{Error, Result, network_controller::POD_FINALIZER};
 
 // Context for our reconciler
 #[derive(Clone)]
@@ -37,12 +38,15 @@ async fn reconcile_network(network: Arc<Network>, ctx: Arc<Context>) -> Result<A
     let api_nw: Api<Network> = Api::namespaced(ctx.client.clone(), &ns);
 
     info!("Reconciling Network \"{}\" in {}", network.name_any(), ns);
-    finalizer(&api_nw, NETWORK_FINALIZER, network, async |event| {
-        match event {
+    finalizer(
+        &api_nw,
+        NETWORK_FINALIZER,
+        network,
+        async |event| match event {
             Finalizer::Apply(network) => network.reconcile(ctx.clone()).await,
             Finalizer::Cleanup(network) => network.cleanup(ctx.clone()).await,
-        }
-    })
+        },
+    )
     .await
     .map_err(|e| Error::FinalizerError(Box::new(e)))
 }
@@ -52,12 +56,15 @@ async fn reconcile_router(router: Arc<Router>, ctx: Arc<Context>) -> Result<Acti
     let api_router: Api<Router> = Api::namespaced(ctx.client.clone(), &ns);
 
     info!("Reconciling Router \"{}\" in {}", router.name_any(), ns);
-    finalizer(&api_router, ROUTER_FINALIZER, router, async |event| {
-        match event {
+    finalizer(
+        &api_router,
+        ROUTER_FINALIZER,
+        router,
+        async |event| match event {
             Finalizer::Apply(router) => router.reconcile(ctx.clone()).await,
             Finalizer::Cleanup(router) => router.cleanup(ctx.clone()).await,
-        }
-    })
+        },
+    )
     .await
     .map_err(|e| Error::FinalizerError(Box::new(e)))
 }
@@ -66,11 +73,9 @@ async fn reconcile_pod(pod: Arc<Pod>, ctx: Arc<Context>) -> Result<Action> {
     let ns = pod.namespace().unwrap();
     let api_pod: Api<Pod> = Api::namespaced(ctx.client.clone(), &ns);
     info!("Reconciling Pod \"{}\" in {}", pod.name_any(), ns);
-    finalizer(&api_pod, POD_FINALIZER, pod, async |event| {
-        match event {
-            Finalizer::Apply(pod) => pod_apply(pod, (*ctx).clone()).await,
-            Finalizer::Cleanup(pod) => pod_cleanup(pod, (*ctx).clone()).await,
-        }
+    finalizer(&api_pod, POD_FINALIZER, pod, async |event| match event {
+        Finalizer::Apply(pod) => pod_apply(pod, (*ctx).clone()).await,
+        Finalizer::Cleanup(pod) => pod_cleanup(pod, (*ctx).clone()).await,
     })
     .await
     .map_err(|e| Error::FinalizerError(Box::new(e)))
@@ -137,7 +142,9 @@ fn pod_error_policy(_: Arc<Pod>, error: &Error, _: Arc<Context>) -> Action {
 }
 
 pub async fn run_nw(state: State) {
-    let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
+    let client = Client::try_default()
+        .await
+        .expect("Expected a valid KUBECONFIG environment variable");
     let api_nw = Api::<Network>::all(client.clone());
     if let Err(e) = api_nw.list(&ListParams::default().limit(1)).await {
         error!("Network CRD is not queryable; {e:?}. Is the CRD installed?");
@@ -146,13 +153,20 @@ pub async fn run_nw(state: State) {
     }
     Controller::new(api_nw, watcher::Config::default().any_semantic())
         .shutdown_on_signal()
-        .run(reconcile_network, network_error_policy, state.to_context(client.clone()).await)
-        .filter_map(async |x| { std::result::Result::ok(x) })
-        .for_each(async |_| () ).await;
+        .run(
+            reconcile_network,
+            network_error_policy,
+            state.to_context(client.clone()).await,
+        )
+        .filter_map(async |x| std::result::Result::ok(x))
+        .for_each(async |_| ())
+        .await;
 }
 
 pub async fn run_router(state: State) {
-    let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
+    let client = Client::try_default()
+        .await
+        .expect("Expected a valid KUBECONFIG environment variable");
     let api_router = Api::<Router>::all(client.clone());
     if let Err(e) = api_router.list(&ListParams::default().limit(1)).await {
         error!("Router CRD is not queryable; {e:?}. Is the CRD installed?");
@@ -161,17 +175,32 @@ pub async fn run_router(state: State) {
     }
     Controller::new(api_router, watcher::Config::default().any_semantic())
         .shutdown_on_signal()
-        .run(reconcile_router, router_error_policy, state.to_context(client.clone()).await)
-        .filter_map(async |x| { std::result::Result::ok(x) })
-        .for_each(async |_| ()).await;
+        .run(
+            reconcile_router,
+            router_error_policy,
+            state.to_context(client.clone()).await,
+        )
+        .filter_map(async |x| std::result::Result::ok(x))
+        .for_each(async |_| ())
+        .await;
 }
 
 pub async fn run_pod_sync(state: State) {
-    let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
+    let client = Client::try_default()
+        .await
+        .expect("Expected a valid KUBECONFIG environment variable");
     let api_pod = Api::<Pod>::all(client.clone());
-    Controller::new(api_pod, watcher::Config::default().labels_from(&Expression::Exists(DS_LABEL_KEY.into()).into()))
-        .shutdown_on_signal()
-        .run(reconcile_pod, pod_error_policy, state.to_context(client.clone()).await)
-        .filter_map(async |x| { std::result::Result::ok(x) })
-        .for_each(async |_| ()).await;
+    Controller::new(
+        api_pod,
+        watcher::Config::default().labels_from(&Expression::Exists(DS_LABEL_KEY.into()).into()),
+    )
+    .shutdown_on_signal()
+    .run(
+        reconcile_pod,
+        pod_error_policy,
+        state.to_context(client.clone()).await,
+    )
+    .filter_map(async |x| std::result::Result::ok(x))
+    .for_each(async |_| ())
+    .await;
 }

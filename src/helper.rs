@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
+use crate::{Error, Result};
 use k8s_openapi::api::core::v1::{Pod, Secret};
 use kube::{Api, Client};
-use crate::{Result, Error};
 
 pub fn get_my_namespace() -> Result<String> {
     std::fs::read_to_string("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
@@ -26,9 +26,12 @@ pub async fn get_my_image(client: Client) -> Result<String> {
     let pod = get_my_pod(client).await?;
     pod.spec
         .ok_or(Error::OtherError("Pod spec not found".to_string()))?
-        .containers.first()
+        .containers
+        .first()
         .ok_or(Error::OtherError("Container not found".to_string()))?
-        .image.clone().ok_or(Error::OtherError("Image not found".to_string()))
+        .image
+        .clone()
+        .ok_or(Error::OtherError("Image not found".to_string()))
 }
 
 pub enum Decoded {

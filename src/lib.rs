@@ -24,7 +24,7 @@ pub enum Error {
 
     #[error("Missing Label: {0}")]
     MissingLabel(String),
-    
+
     #[error("Missing Annotation: {0}")]
     MissingAnnotation(String),
 
@@ -34,10 +34,10 @@ pub enum Error {
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-mod ndnd;
-pub mod network_controller;
 pub mod cert_controller;
 pub mod helper;
+mod ndnd;
+pub mod network_controller;
 pub use crate::ndnd::*;
 
 /// Log and trace integrations
