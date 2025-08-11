@@ -67,7 +67,7 @@ spec:
                 nullable: true
                 type: string
               renewInterval:
-                description: Duration of the certificate
+                description: Duration of the certificate validity (total lifetime)
                 nullable: true
                 type: string
             required:
@@ -78,17 +78,18 @@ spec:
             nullable: true
             properties:
               cert:
-                description: The status of the certificate cert file
+                description: The status of the certificate file
                 properties:
                   issuedAt:
-                    description: The time when the certificate was issued
+                    description: The time when the certificate was issued (RFC3339)
                     nullable: true
                     type: string
                   name:
+                    description: The parsed full NDN name of the certificate
                     nullable: true
                     type: string
                   secret:
-                    description: The name of the secret that contains the certificate data. This secret contains the certificate and the signer certificate
+                    description: The name of the Secret that contains the certificate data (and signer cert)
                     nullable: true
                     type: string
                   sigType:
@@ -100,10 +101,10 @@ spec:
                     nullable: true
                     type: string
                   valid:
-                    description: Indicates whether the certificate is valid
+                    description: Indicates whether the certificate is currently valid (not expired)
                     type: boolean
                   validUntil:
-                    description: The time when the certificate is valid until
+                    description: The time when the certificate is valid until (RFC3339)
                     nullable: true
                     type: string
                 required:
@@ -116,10 +117,11 @@ spec:
                 description: The status of the certificate key
                 properties:
                   name:
+                    description: The parsed full NDN name of the key
                     nullable: true
                     type: string
                   secret:
-                    description: The name of the secret that contains the key data
+                    description: The name of the Secret that contains the key data
                     nullable: true
                     type: string
                   sigType:

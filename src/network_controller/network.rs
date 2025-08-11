@@ -169,7 +169,7 @@ impl Default for OperatorSpec {
 #[serde(rename_all = "camelCase")]
 pub struct NetworkStatus {
     /// Indicates whether the DaemonSet for the network has been created
-    ds_created: Option<bool>,
+    pub ds_created: Option<bool>,
 }
 
 impl Network {

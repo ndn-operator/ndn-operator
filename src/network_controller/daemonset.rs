@@ -101,7 +101,7 @@ pub fn create_owned_daemonset(
                             }]),
                             env: Some(vec![EnvVar {
                                 name: "NDN_CLIENT_TRANSPORT".to_string(),
-                                value: Some(format!("unix://{}", container_socket_path)),
+                                value: Some(format!("unix://{container_socket_path}")),
                                 ..EnvVar::default()
                             }]),
                             volume_mounts: Some(vec![
@@ -164,7 +164,7 @@ pub fn create_owned_daemonset(
                                 },
                                 EnvVar {
                                     name: "NDN_CLIENT_TRANSPORT".to_string(),
-                                    value: Some(format!("unix://{}", container_socket_path)),
+                                    value: Some(format!("unix://{container_socket_path}")),
                                     ..EnvVar::default()
                                 },
                             ]),
