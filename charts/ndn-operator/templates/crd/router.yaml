@@ -37,14 +37,18 @@ spec:
           spec:
             properties:
               cert:
-                description: The certificate for the router. If not specified, the router will be insecure (no certificates)
+                description: |-
+                  The certificate for the router.
+                  If not specified, the router will be insecure (no certificates)
                 nullable: true
                 properties:
                   name:
                     description: The name of the certificate, e.g., "router-cert"
                     type: string
                   namespace:
-                    description: Namespace of the certificate. If not specified, the router's namespace will be used
+                    description: |-
+                      Namespace of the certificate.
+                      If not specified, the router's namespace will be used
                     nullable: true
                     type: string
                 required:
@@ -54,7 +58,9 @@ spec:
                 description: The name of the node where the router is running
                 type: string
               prefix:
-                description: The prefix for the router, used for routing and naming conventions. This should be a valid NDN prefix, e.g., "/example/router"
+                description: |-
+                  The prefix for the router, used for routing and naming conventions.
+                  This should be a valid NDN prefix, e.g., "/example/router"
                 type: string
             required:
             - nodeName

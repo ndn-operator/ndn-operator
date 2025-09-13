@@ -43,16 +43,22 @@ spec:
           spec:
             properties:
               issuer:
-                description: The issuer of the certificate, which can be another Certificate or an external issuer. Can reference itself if the certificate is self-signed
+                description: |-
+                  The issuer of the certificate, which can be another Certificate or an external issuer.
+                  Can reference itself if the certificate is self-signed
                 properties:
                   kind:
-                    description: The kind of the issuer, e.g., "Certificate". Currently only "Certificate" is supported
+                    description: |-
+                      The kind of the issuer, e.g., "Certificate".
+                      Currently only "Certificate" is supported
                     type: string
                   name:
                     description: The name of the issuer, e.g., "router-cert"
                     type: string
                   namespace:
-                    description: The namespace of the issuer If not specified, the certificate's namespace will be used
+                    description: |-
+                      The namespace of the issuer
+                      If not specified, the certificate's namespace will be used
                     nullable: true
                     type: string
                 required:
@@ -63,7 +69,10 @@ spec:
                 description: The prefix for the certificate, used for routing and naming conventions
                 type: string
               renewBefore:
-                description: When the certificate should be renewed before it expires. This is a duration string, e.g., "7d2h" for 7 days and 2 hours. If not specified, defaults to 24 hours
+                description: |-
+                  When the certificate should be renewed before it expires.
+                  This is a duration string, e.g., "7d2h" for 7 days and 2 hours.
+                  If not specified, defaults to 24 hours
                 nullable: true
                 type: string
               renewInterval:
