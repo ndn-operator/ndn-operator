@@ -428,13 +428,19 @@ impl Network {
                 },
                 PolicyRule {
                     api_groups: Some(vec!["named-data.net".to_string()]),
-                    resources: Some(vec!["certificates".to_string(), "externalcertificates".to_string()]),
+                    resources: Some(vec![
+                        "certificates".to_string(),
+                        "externalcertificates".to_string(),
+                    ]),
                     verbs: vec!["list".to_string(), "watch".to_string()],
                     ..PolicyRule::default()
                 },
                 PolicyRule {
                     api_groups: Some(vec!["named-data.net".to_string()]),
-                    resources: Some(vec!["certificates/status".to_string(), "externalcertificates/status".to_string()]),
+                    resources: Some(vec![
+                        "certificates/status".to_string(),
+                        "externalcertificates/status".to_string(),
+                    ]),
                     verbs: vec!["get".to_string()],
                     ..PolicyRule::default()
                 },
