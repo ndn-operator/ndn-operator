@@ -59,26 +59,27 @@ async fn mutate_handler(body: AdmissionReview<DynamicObject>) -> Result<impl Rep
             let obj_name = obj.name_any();
             match obj.try_parse::<Pod>() {
                 Ok(pod) => {
-                    let name = obj_name;
-                    if let Some(network_name) = pod.annotations().get(ANNOTATION_NAME) {
-                        let network_namespace: String = pod
-                            .annotations()
-                            .get(ANNOTATION_NAMESPACE)
-                            .cloned()
-                            .unwrap_or_else(|| pod.namespace().unwrap());
-                        res = match mutate(res.clone(), &pod, network_name, &network_namespace)
-                            .await
-                        {
-                            Ok(res) => {
-                                info!("accepted: {:?} on {}", req.operation, name);
-                                res
-                            }
-                            Err(err) => {
-                                warn!("denied: {:?} on {} ({})", req.operation, name, err);
-                                res.deny(err.to_string())
-                            }
-                        };
-                    }
+                    let (network_name, network_namespace) = match (
+                        pod.annotations().get(ANNOTATION_NAME),
+                        pod.annotations().get(ANNOTATION_NAMESPACE),
+                    ) {
+                        (Some(name), Some(ns)) => (name.clone(), ns.clone()),
+                        (Some(name), None) => (name.clone(), pod.namespace().unwrap_or_default()),
+                        _ => {
+                            debug!("skipped: {:?} on {}", req.operation, obj_name);
+                            return Ok(reply::json(&res.into_review()));
+                        }
+                    };
+                    res = match mutate(res.clone(), &pod, &network_name, &network_namespace).await {
+                        Ok(res) => {
+                            info!("accepted: {:?} on {}", req.operation, obj_name);
+                            res
+                        }
+                        Err(err) => {
+                            warn!("denied: {:?} on {} ({})", req.operation, obj_name, err);
+                            res.deny(err.to_string())
+                        }
+                    };
                 }
                 Err(err) => {
                     warn!("denied: {:?} on {} ({})", req.operation, obj_name, err);
