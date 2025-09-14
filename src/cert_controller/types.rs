@@ -1,5 +1,6 @@
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use kube::CustomResource;
+use operator_derive::Conditions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
@@ -55,7 +56,7 @@ pub struct IssuerRef {
     pub namespace: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema, Conditions)]
 #[serde(rename_all = "camelCase")]
 pub struct CertificateStatus {
     /// The status of the certificate key

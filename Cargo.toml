@@ -24,6 +24,7 @@ name = "injector"
 path = "src/bin/injector.rs"
 
 [dependencies]
+operator-derive = { path = "operator-derive" }
 actix-web = "4.11.0"
 anyhow = "1.0.99"
 duration-string = { version = "0.5.3", features = ["serde"] }

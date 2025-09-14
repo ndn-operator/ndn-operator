@@ -1,4 +1,5 @@
 use super::Context;
+use crate::conditions::Conditions;
 use crate::{
     Error, Result,
     cert_controller::{Certificate, CertificateSpec, IssuerRef, is_cert_valid},
@@ -7,6 +8,7 @@ use crate::{
     network_controller::{CertificateRef, Router, RouterSpec},
 };
 use duration_string::DurationString;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use k8s_openapi::{
     api::{
         apps::v1::DaemonSet,
@@ -24,6 +26,7 @@ use kube::{
         wait::await_condition,
     },
 };
+use operator_derive::Conditions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -161,11 +164,16 @@ impl Default for OperatorSpec {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, Conditions)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkStatus {
     /// Indicates whether the DaemonSet for the network has been created
     pub ds_created: Option<bool>,
+    /// Standard Kubernetes-style conditions for this network
+    /// - Ready: DSCreated && RBACReady
+    /// - DSCreated: DaemonSet successfully applied
+    /// - RBACReady: ServiceAccount, Role, RoleBinding successfully applied
+    pub conditions: Option<Vec<K8sCondition>>,
 }
 
 impl Network {
@@ -211,6 +219,19 @@ impl Network {
             )
             .await
             .map_err(Error::KubeError)?;
+        // RBAC applied successfully
+        let observed_gen = self.metadata.generation.unwrap_or(0);
+        let mut s = NetworkStatus {
+            ds_created: None,
+            conditions: None,
+        };
+        s.upsert_bool(
+            "RBACReady",
+            true,
+            "Applied",
+            Some("ServiceAccount, Role, RoleBinding applied"),
+            observed_gen,
+        );
         // Create DaemonSet
         let ds = api_ds
             .patch(&self.name_any(), &serverside, &Patch::Apply(ds_data))
@@ -229,10 +250,31 @@ impl Network {
             )),
         )
         .await;
-        // Update the status of the Network
+        // Update conditions and status of the Network
+        s.upsert_bool(
+            "DSCreated",
+            true,
+            "Created",
+            Some("DaemonSet applied"),
+            observed_gen,
+        );
+        // Compute Ready
+        let ready = true; // both RBACReady and DSCreated just set true above
+        s.upsert_bool(
+            "Ready",
+            ready,
+            if ready {
+                "Ready"
+            } else {
+                "PrerequisitesNotReady"
+            },
+            None,
+            observed_gen,
+        );
         let status = json!({
-            "status": NetworkStatus {
-                ds_created: Some(true),
+            "status": {
+                "dsCreated": true,
+                "conditions": s.conditions
             }
         });
         let _o = api_nw
