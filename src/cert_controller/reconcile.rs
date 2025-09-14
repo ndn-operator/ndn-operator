@@ -1,9 +1,9 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration as StdDuration};
 
+use crate::conditions::Conditions;
 use chrono::{DateTime, Duration, Utc};
 use duration_string::DurationString;
 use k8s_openapi::api::core::v1::Secret;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use kube::core::object::HasStatus;
 use kube::runtime::{controller::Action, wait::Condition};
 use kube::{
@@ -35,8 +35,7 @@ impl Certificate {
 
         // Start with a working copy and surface RenewalRequired immediately from current status
         let mut _working = status.clone();
-        upsert_condition_bool(
-            &mut _working.conditions,
+        _working.upsert_bool(
             "RenewalRequired",
             _working.needs_renewal,
             if _working.needs_renewal {
@@ -51,8 +50,7 @@ impl Certificate {
         let new_status = match (status.key_exists, status.cert_exists, status.needs_renewal) {
             (true, true, true) => {
                 // Mark Issuing while we create a new certificate
-                upsert_condition_bool(
-                    &mut _working.conditions,
+                _working.upsert_bool(
                     "Issuing",
                     true,
                     "Renewing",
@@ -74,8 +72,7 @@ impl Certificate {
                 st
             }
             (true, false, _) => {
-                upsert_condition_bool(
-                    &mut _working.conditions,
+                _working.upsert_bool(
                     "Issuing",
                     true,
                     "Issuing",
@@ -131,8 +128,7 @@ impl Certificate {
         let renew_before = self.renew_before(status)?;
         new_status.needs_renewal = renew_before <= now;
         // Reflect RenewalRequired condition
-        upsert_condition_bool(
-            &mut new_status.conditions,
+        new_status.upsert_bool(
             "RenewalRequired",
             new_status.needs_renewal,
             if new_status.needs_renewal {
@@ -171,8 +167,7 @@ impl Certificate {
                         .as_ref()
                         .ok_or(Error::OtherError("Issuer status not found".to_string()))?;
                     // IssuerReady true as we could fetch usable status
-                    upsert_condition_bool(
-                        &mut new_status.conditions,
+                    new_status.upsert_bool(
                         "IssuerReady",
                         true,
                         "IssuerResolved",
@@ -192,8 +187,7 @@ impl Certificate {
                     (key_secret_name, cert_secret_name, self_signed)
                 }
                 _ => {
-                    upsert_condition_bool(
-                        &mut new_status.conditions,
+                    new_status.upsert_bool(
                         "IssuerReady",
                         false,
                         "UnsupportedIssuerKind",
@@ -252,7 +246,7 @@ impl Certificate {
         let cert_data = self.create_owned_secret(
             cert_secret_name.clone(),
             &BTreeMap::from([
-                (Self::CERT_KEY.to_string(), cert_info.cert_text),
+                (Self::CERT_KEY.to_string(), cert_info.cert_text.clone()),
                 (Self::SIGNER_CERT_KEY.to_string(), signer_cert_text),
             ]),
         );
@@ -262,22 +256,6 @@ impl Certificate {
             .await
             .map_err(Error::KubeError)?;
 
-        emit_info(
-            &ctx.recorder,
-            self,
-            "CertCreated",
-            "Created",
-            Some(format!(
-                "Created `{}` Cert for `{}` Certificate",
-                cert_secret.name_any(),
-                self.name_any()
-            )),
-        )
-        .await;
-
-        new_status.cert.name = Some(cert_info.name);
-        new_status.cert.sig_type = Some(cert_info.sig_type);
-        new_status.cert.signer_key = Some(cert_info.signer_key);
         new_status.cert.issued_at = Some(cert_info.validity.0.to_rfc3339());
         new_status.cert.valid_until = Some(cert_info.validity.1.to_rfc3339());
         new_status.cert.secret = Some(cert_secret.name_any());
@@ -285,8 +263,7 @@ impl Certificate {
         new_status.cert_exists = true;
         // Update availability conditions and finish issuing
         set_availability_conditions(self, &mut new_status);
-        upsert_condition_bool(
-            &mut new_status.conditions,
+        new_status.upsert_bool(
             "Issuing",
             false,
             "Renewed",
@@ -330,8 +307,7 @@ impl Certificate {
         new_status.key.secret = Some(secret.name_any());
         new_status.key_exists = true;
         // KeyReady becomes true when key is generated and secret is created
-        upsert_condition_bool(
-            &mut new_status.conditions,
+        new_status.upsert_bool(
             "KeyReady",
             true,
             "KeyGenerated",
@@ -371,8 +347,7 @@ fn set_availability_conditions(cert: &Certificate, status: &mut CertificateStatu
     let observed_gen = cert.metadata.generation.unwrap_or(0);
     let key_ready = status.key_exists && status.key.secret.is_some();
     let cert_ready = status.cert_exists && status.cert.valid && status.cert.secret.is_some();
-    upsert_condition_bool(
-        &mut status.conditions,
+    status.upsert_bool(
         "KeyReady",
         key_ready,
         if key_ready {
@@ -383,8 +358,7 @@ fn set_availability_conditions(cert: &Certificate, status: &mut CertificateStatu
         None,
         observed_gen,
     );
-    upsert_condition_bool(
-        &mut status.conditions,
+    status.upsert_bool(
         "CertReady",
         cert_ready,
         if cert_ready {
@@ -410,8 +384,7 @@ fn set_availability_conditions(cert: &Certificate, status: &mut CertificateStatu
         }
         Some(format!("Missing prerequisites: {}", missing.join(", ")))
     };
-    upsert_condition_bool(
-        &mut status.conditions,
+    status.upsert_bool(
         "Ready",
         ready,
         if ready {
@@ -424,69 +397,7 @@ fn set_availability_conditions(cert: &Certificate, status: &mut CertificateStatu
     );
 }
 
-fn upsert_condition_bool(
-    target: &mut Option<Vec<K8sCondition>>,
-    type_: &str,
-    status: bool,
-    reason: &str,
-    message: Option<&str>,
-    observed_generation: i64,
-) {
-    let cond = make_condition(
-        type_,
-        status,
-        reason,
-        message.unwrap_or(""),
-        observed_generation,
-    );
-    upsert_condition(target, cond);
-}
-
-fn make_condition(
-    type_: &str,
-    status: bool,
-    reason: &str,
-    message: &str,
-    observed_generation: i64,
-) -> K8sCondition {
-    use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
-    let now = Time(Utc::now());
-    K8sCondition {
-        type_: type_.to_string(),
-        status: if status {
-            "True".to_string()
-        } else {
-            "False".to_string()
-        },
-        reason: reason.to_string(),
-        message: message.to_string(),
-        observed_generation: Some(observed_generation),
-        last_transition_time: now,
-    }
-}
-
-fn upsert_condition(target: &mut Option<Vec<K8sCondition>>, new_cond: K8sCondition) {
-    match target {
-        Some(vec) => {
-            if let Some(pos) = vec.iter().position(|c| c.type_ == new_cond.type_) {
-                if vec[pos].status != new_cond.status {
-                    vec[pos] = new_cond;
-                } else {
-                    let last_transition_time = vec[pos].last_transition_time.clone();
-                    vec[pos].reason = new_cond.reason;
-                    vec[pos].message = new_cond.message;
-                    vec[pos].observed_generation = new_cond.observed_generation;
-                    vec[pos].last_transition_time = last_transition_time;
-                }
-            } else {
-                vec.push(new_cond);
-            }
-        }
-        None => {
-            *target = Some(vec![new_cond]);
-        }
-    }
-}
+// local helpers removed; using crate::conditions
 
 pub fn is_cert_valid() -> impl Condition<Certificate> {
     |obj: Option<&Certificate>| {

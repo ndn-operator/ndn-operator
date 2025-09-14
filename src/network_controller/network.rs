@@ -1,4 +1,5 @@
 use super::Context;
+use crate::conditions::Conditions;
 use crate::{
     Error, Result,
     cert_controller::{Certificate, CertificateSpec, IssuerRef, is_cert_valid},
@@ -25,6 +26,7 @@ use kube::{
         wait::await_condition,
     },
 };
+use operator_derive::Conditions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -162,7 +164,7 @@ impl Default for OperatorSpec {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, Conditions)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkStatus {
     /// Indicates whether the DaemonSet for the network has been created
@@ -218,10 +220,12 @@ impl Network {
             .await
             .map_err(Error::KubeError)?;
         // RBAC applied successfully
-        let mut conditions: Option<Vec<K8sCondition>> = None;
         let observed_gen = self.metadata.generation.unwrap_or(0);
-        upsert_condition_bool(
-            &mut conditions,
+        let mut s = NetworkStatus {
+            ds_created: None,
+            conditions: None,
+        };
+        s.upsert_bool(
             "RBACReady",
             true,
             "Applied",
@@ -247,8 +251,7 @@ impl Network {
         )
         .await;
         // Update conditions and status of the Network
-        upsert_condition_bool(
-            &mut conditions,
+        s.upsert_bool(
             "DSCreated",
             true,
             "Created",
@@ -257,8 +260,7 @@ impl Network {
         );
         // Compute Ready
         let ready = true; // both RBACReady and DSCreated just set true above
-        upsert_condition_bool(
-            &mut conditions,
+        s.upsert_bool(
             "Ready",
             ready,
             if ready {
@@ -272,7 +274,7 @@ impl Network {
         let status = json!({
             "status": {
                 "dsCreated": true,
-                "conditions": conditions
+                "conditions": s.conditions
             }
         });
         let _o = api_nw
@@ -514,67 +516,4 @@ impl Network {
         Ok(cert)
     }
 }
-
-fn upsert_condition_bool(
-    target: &mut Option<Vec<K8sCondition>>,
-    type_: &str,
-    status: bool,
-    reason: &str,
-    message: Option<&str>,
-    observed_generation: i64,
-) {
-    let cond = make_condition(
-        type_,
-        status,
-        reason,
-        message.unwrap_or(""),
-        observed_generation,
-    );
-    upsert_condition(target, cond);
-}
-
-fn make_condition(
-    type_: &str,
-    status: bool,
-    reason: &str,
-    message: &str,
-    observed_generation: i64,
-) -> K8sCondition {
-    use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
-    let now = Time(std::time::SystemTime::now().into());
-    K8sCondition {
-        type_: type_.to_string(),
-        status: if status {
-            "True".to_string()
-        } else {
-            "False".to_string()
-        },
-        reason: reason.to_string(),
-        message: message.to_string(),
-        observed_generation: Some(observed_generation),
-        last_transition_time: now,
-    }
-}
-
-fn upsert_condition(target: &mut Option<Vec<K8sCondition>>, new_cond: K8sCondition) {
-    match target {
-        Some(vec) => {
-            if let Some(pos) = vec.iter().position(|c| c.type_ == new_cond.type_) {
-                if vec[pos].status != new_cond.status {
-                    vec[pos] = new_cond;
-                } else {
-                    let last_transition_time = vec[pos].last_transition_time.clone();
-                    vec[pos].reason = new_cond.reason;
-                    vec[pos].message = new_cond.message;
-                    vec[pos].observed_generation = new_cond.observed_generation;
-                    vec[pos].last_transition_time = last_transition_time;
-                }
-            } else {
-                vec.push(new_cond);
-            }
-        }
-        None => {
-            *target = Some(vec![new_cond]);
-        }
-    }
-}
+// Note: Local condition helper implementations removed in favor of shared helpers in crate::conditions
