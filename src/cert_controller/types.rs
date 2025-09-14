@@ -50,7 +50,8 @@ pub struct IssuerRef {
     /// The name of the issuer, e.g., "router-cert"
     pub name: String,
     /// The kind of the issuer, e.g., "Certificate".
-    /// Currently only "Certificate" is supported
+    /// "Certificate" and "ExternalCertificate" are supported
+    /// "ExternalCertificate" must have a key to sign certificates
     pub kind: String,
     /// The namespace of the issuer
     /// If not specified, the certificate's namespace will be used

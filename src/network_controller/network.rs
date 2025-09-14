@@ -95,7 +95,7 @@ pub struct TrustAnchorRef {
     /// The name of the trust anchor, e.g., "router-cert"
     pub name: String,
     /// The kind of the trust anchor, e.g., "Certificate".
-    /// Currently only "Certificate" is supported
+    /// "Certificate" and "ExternalCertificate" are supported
     pub kind: String,
     /// The namespace of the trust anchor.
     /// If not specified, the network's namespace will be used
