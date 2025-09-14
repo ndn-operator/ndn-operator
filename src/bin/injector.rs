@@ -1,17 +1,16 @@
 use json_patch::jsonptr::PointerBuf;
 use k8s_openapi::api::core::v1::{EnvVar, HostPathVolumeSource, Pod, Volume, VolumeMount};
 use kube::{
-    core::{
-        admission::{AdmissionRequest, AdmissionResponse, AdmissionReview, Operation},
-        DynamicObject, ResourceExt,
-    },
     Client,
+    core::{
+        DynamicObject, ResourceExt,
+        admission::{AdmissionRequest, AdmissionResponse, AdmissionReview, Operation},
+    },
 };
 use operator::{network_controller::Network, telemetry};
 use std::{convert::Infallible, env, error::Error};
 use tracing::*;
-use warp::{reply, Filter, Reply};
-
+use warp::{Filter, Reply, reply};
 
 static ANNOTATION_NAME: &str = "networks.named-data.net/name";
 static ANNOTATION_NAMESPACE: &str = "networks.named-data.net/namespace";
@@ -19,9 +18,13 @@ static ANNOTATION_NAMESPACE: &str = "networks.named-data.net/namespace";
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     telemetry::init().await;
-    
-    let listen_port = env::var("NDN_INJECTOR_PORT").unwrap_or("8443".to_string()).parse::<u16>()?;
-    let listen_ip = env::var("NDN_INJECTOR_IP").unwrap_or("0.0.0.0".to_string()).parse::<std::net::IpAddr>()?;
+
+    let listen_port = env::var("NDN_INJECTOR_PORT")
+        .unwrap_or("8443".to_string())
+        .parse::<u16>()?;
+    let listen_ip = env::var("NDN_INJECTOR_IP")
+        .unwrap_or("0.0.0.0".to_string())
+        .parse::<std::net::IpAddr>()?;
     let cert_path = env::var("NDN_INJECTOR_TLS_CERT_FILE").unwrap_or("tls.crt".to_string());
     let key_path = env::var("NDN_INJECTOR_TLS_KEY_FILE").unwrap_or("tls.key".to_string());
 
@@ -29,7 +32,6 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::body::json())
         .and_then(mutate_handler)
         .with(warp::trace::request());
-
 
     warp::serve(warp::post().and(routes))
         .tls()
@@ -52,48 +54,66 @@ async fn mutate_handler(body: AdmissionReview<DynamicObject>) -> Result<impl Rep
     };
 
     let mut res = AdmissionResponse::from(&req);
-    if let Some(obj) = req.object {
-        if let Ok(pod) = obj.try_parse::<Pod>() {
-            let name = pod.name_any();
-            if let Operation::Create = req.operation {
-                if let Some(network_name) = pod.annotations().get(ANNOTATION_NAME) {
-                    let network_namespace = match pod.annotations().get(ANNOTATION_NAMESPACE) {
-                        Some(ns) => ns,
-                        None => &pod.namespace().unwrap(),
+    match (req.object, &req.operation) {
+        (Some(obj), Operation::Create) => {
+            let obj_name = obj.name_any();
+            match obj.try_parse::<Pod>() {
+                Ok(pod) => {
+                    let (network_name, network_namespace) = match (
+                        pod.annotations().get(ANNOTATION_NAME),
+                        pod.annotations().get(ANNOTATION_NAMESPACE),
+                    ) {
+                        (Some(name), Some(ns)) => (name.clone(), ns.clone()),
+                        (Some(name), None) => (name.clone(), pod.namespace().unwrap_or_default()),
+                        _ => {
+                            debug!("skipped: {:?} on {}", req.operation, obj_name);
+                            return Ok(reply::json(&res.into_review()));
+                        }
                     };
-                    res = match mutate(res.clone(), &pod, network_name, network_namespace).await {
+                    res = match mutate(res.clone(), &pod, &network_name, &network_namespace).await {
                         Ok(res) => {
-                            info!("accepted: {:?} on {}", req.operation, name);
+                            info!("accepted: {:?} on {}", req.operation, obj_name);
                             res
                         }
                         Err(err) => {
-                            warn!("denied: {:?} on {} ({})", req.operation, name, err);
+                            warn!("denied: {:?} on {} ({})", req.operation, obj_name, err);
                             res.deny(err.to_string())
                         }
                     };
-                };
+                }
+                Err(err) => {
+                    warn!("denied: {:?} on {} ({})", req.operation, obj_name, err);
+                    res = res.deny(err.to_string());
+                }
             }
+        }
+        _ => {
+            debug!("skipped: {:?}", req.operation);
         }
     }
     // Wrap the AdmissionResponse wrapped in an AdmissionReview
     Ok(reply::json(&res.into_review()))
 }
 
-
-async fn mutate(res: AdmissionResponse, pod: &Pod, network_name: &String, network_namespace: &String) -> Result<AdmissionResponse, Box<dyn Error>> {
-
-    let client = Client::try_default().await.expect("Expected a valid KUBECONFIG environment variable");
+async fn mutate(
+    res: AdmissionResponse,
+    pod: &Pod,
+    network_name: &String,
+    network_namespace: &String,
+) -> Result<AdmissionResponse, Box<dyn Error>> {
+    let client = Client::try_default()
+        .await
+        .expect("Expected a valid KUBECONFIG environment variable");
 
     // If network doesn't exist, deny the request
     let api_network = kube::Api::<Network>::namespaced(client.clone(), network_namespace);
-    let network = match api_network
-        .get(network_name)
-        .await
-    {
+    let network = match api_network.get(network_name).await {
         Ok(network) => network,
         Err(err) => {
             error!("failed to get network {network_name} in {network_namespace}: {err}");
-            return Ok(res.deny(format!("failed to get network {network_name} in {network_namespace}: {err}")));
+            return Ok(res.deny(format!(
+                "failed to get network {network_name} in {network_namespace}: {err}"
+            )));
         }
     };
 
@@ -118,7 +138,13 @@ async fn mutate(res: AdmissionResponse, pod: &Pod, network_name: &String, networ
             value: serde_json::json!([]),
         }));
         patches.push(json_patch::PatchOperation::Add(json_patch::AddOperation {
-            path: PointerBuf::from_tokens(["spec", "containers", &i.to_string(), "volumeMounts", "-"]),
+            path: PointerBuf::from_tokens([
+                "spec",
+                "containers",
+                &i.to_string(),
+                "volumeMounts",
+                "-",
+            ]),
             value: serde_json::json!(create_volume_mount()),
         }));
         patches.push(json_patch::PatchOperation::Add(json_patch::AddOperation {

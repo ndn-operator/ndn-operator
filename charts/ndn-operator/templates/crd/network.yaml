@@ -50,7 +50,9 @@ spec:
                 nullable: true
                 type: object
               operator:
-                description: The operator image to use for the network controller. If not specified, the operator will use its own image
+                description: |-
+                  The operator image to use for the network controller.
+                  If not specified, the operator will use its own image
                 nullable: true
                 properties:
                   image:
@@ -59,20 +61,29 @@ spec:
                 - image
                 type: object
               prefix:
-                description: The prefix for the network, used for routing and naming conventions. This should be a valid NDN prefix, e.g., "/example/network"
+                description: |-
+                  The prefix for the network, used for routing and naming conventions.
+                  This should be a valid NDN prefix, e.g., "/example/network"
                 type: string
               routerCertIssuer:
-                description: The certificate issuer for the router certificates. If not specified, the network will be insecure (no certificates)
+                description: |-
+                  The certificate issuer for the router certificates.
+                  If not specified, the network will be insecure (no certificates)
                 nullable: true
                 properties:
                   kind:
-                    description: The kind of the issuer, e.g., "Certificate". Currently only "Certificate" is supported
+                    description: |-
+                      The kind of the issuer, e.g., "Certificate".
+                      "Certificate" and "ExternalCertificate" are supported
+                      "ExternalCertificate" must have a key to sign certificates
                     type: string
                   name:
                     description: The name of the issuer, e.g., "router-cert"
                     type: string
                   namespace:
-                    description: The namespace of the issuer If not specified, the certificate's namespace will be used
+                    description: |-
+                      The namespace of the issuer
+                      If not specified, the certificate's namespace will be used
                     nullable: true
                     type: string
                 required:
@@ -84,13 +95,17 @@ spec:
                 items:
                   properties:
                     kind:
-                      description: The kind of the trust anchor, e.g., "Certificate". Currently only "Certificate" is supported
+                      description: |-
+                        The kind of the trust anchor, e.g., "Certificate".
+                        "Certificate" and "ExternalCertificate" are supported
                       type: string
                     name:
                       description: The name of the trust anchor, e.g., "router-cert"
                       type: string
                     namespace:
-                      description: The namespace of the trust anchor. If not specified, the network's namespace will be used
+                      description: |-
+                        The namespace of the trust anchor.
+                        If not specified, the network's namespace will be used
                       nullable: true
                       type: string
                   required:
@@ -100,7 +115,9 @@ spec:
                 nullable: true
                 type: array
               udpUnicastPort:
-                description: The UDP unicast port for the nodes. Must be unique across all networks in the cluster.
+                description: |-
+                  The UDP unicast port for the nodes.
+                  Must be unique across all networks in the cluster.
                 format: int32
                 type: integer
             required:
@@ -110,6 +127,44 @@ spec:
           status:
             nullable: true
             properties:
+              conditions:
+                description: |-
+                  Standard Kubernetes-style conditions for this network
+                  - Ready: DSCreated && RBACReady
+                  - DSCreated: DaemonSet successfully applied
+                  - RBACReady: ServiceAccount, Role, RoleBinding successfully applied
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      format: int64
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                nullable: true
+                type: array
               dsCreated:
                 description: Indicates whether the DaemonSet for the network has been created
                 nullable: true

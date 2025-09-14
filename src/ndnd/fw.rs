@@ -225,9 +225,7 @@ pub struct DeadNonceListConfig {
 
 impl Default for DeadNonceListConfig {
     fn default() -> Self {
-        Self {
-            lifetime: 6000,
-        }
+        Self { lifetime: 6000 }
     }
 }
 
@@ -271,8 +269,6 @@ pub struct HashtableConfig {
 
 impl Default for HashtableConfig {
     fn default() -> Self {
-        Self {
-            m: 5,
-        }
+        Self { m: 5 }
     }
 }
