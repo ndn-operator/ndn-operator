@@ -50,7 +50,9 @@ spec:
                 nullable: true
                 type: object
               operator:
-                description: The operator image to use for the network controller. If not specified, the operator will use its own image
+                description: |-
+                  The operator image to use for the network controller.
+                  If not specified, the operator will use its own image
                 nullable: true
                 properties:
                   image:
@@ -59,20 +61,28 @@ spec:
                 - image
                 type: object
               prefix:
-                description: The prefix for the network, used for routing and naming conventions. This should be a valid NDN prefix, e.g., "/example/network"
+                description: |-
+                  The prefix for the network, used for routing and naming conventions.
+                  This should be a valid NDN prefix, e.g., "/example/network"
                 type: string
               routerCertIssuer:
-                description: The certificate issuer for the router certificates. If not specified, the network will be insecure (no certificates)
+                description: |-
+                  The certificate issuer for the router certificates.
+                  If not specified, the network will be insecure (no certificates)
                 nullable: true
                 properties:
                   kind:
-                    description: The kind of the issuer, e.g., "Certificate". Currently only "Certificate" is supported
+                    description: |-
+                      The kind of the issuer, e.g., "Certificate".
+                      Currently only "Certificate" is supported
                     type: string
                   name:
                     description: The name of the issuer, e.g., "router-cert"
                     type: string
                   namespace:
-                    description: The namespace of the issuer If not specified, the certificate's namespace will be used
+                    description: |-
+                      The namespace of the issuer
+                      If not specified, the certificate's namespace will be used
                     nullable: true
                     type: string
                 required:
@@ -84,13 +94,17 @@ spec:
                 items:
                   properties:
                     kind:
-                      description: The kind of the trust anchor, e.g., "Certificate". Currently only "Certificate" is supported
+                      description: |-
+                        The kind of the trust anchor, e.g., "Certificate".
+                        Currently only "Certificate" is supported
                       type: string
                     name:
                       description: The name of the trust anchor, e.g., "router-cert"
                       type: string
                     namespace:
-                      description: The namespace of the trust anchor. If not specified, the network's namespace will be used
+                      description: |-
+                        The namespace of the trust anchor.
+                        If not specified, the network's namespace will be used
                       nullable: true
                       type: string
                   required:
@@ -100,7 +114,9 @@ spec:
                 nullable: true
                 type: array
               udpUnicastPort:
-                description: The UDP unicast port for the nodes. Must be unique across all networks in the cluster.
+                description: |-
+                  The UDP unicast port for the nodes.
+                  Must be unique across all networks in the cluster.
                 format: int32
                 type: integer
             required:

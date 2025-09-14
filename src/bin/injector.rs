@@ -54,27 +54,41 @@ async fn mutate_handler(body: AdmissionReview<DynamicObject>) -> Result<impl Rep
     };
 
     let mut res = AdmissionResponse::from(&req);
-    if let Some(obj) = req.object {
-        if let Ok(pod) = obj.try_parse::<Pod>() {
-            let name = pod.name_any();
-            if let Operation::Create = req.operation {
-                if let Some(network_name) = pod.annotations().get(ANNOTATION_NAME) {
-                    let network_namespace = match pod.annotations().get(ANNOTATION_NAMESPACE) {
-                        Some(ns) => ns,
-                        None => &pod.namespace().unwrap(),
+    match (req.object, &req.operation) {
+        (Some(obj), Operation::Create) => {
+            let obj_name = obj.name_any();
+            match obj.try_parse::<Pod>() {
+                Ok(pod) => {
+                    let (network_name, network_namespace) = match (
+                        pod.annotations().get(ANNOTATION_NAME),
+                        pod.annotations().get(ANNOTATION_NAMESPACE),
+                    ) {
+                        (Some(name), Some(ns)) => (name.clone(), ns.clone()),
+                        (Some(name), None) => (name.clone(), pod.namespace().unwrap_or_default()),
+                        _ => {
+                            debug!("skipped: {:?} on {}", req.operation, obj_name);
+                            return Ok(reply::json(&res.into_review()));
+                        }
                     };
-                    res = match mutate(res.clone(), &pod, network_name, network_namespace).await {
+                    res = match mutate(res.clone(), &pod, &network_name, &network_namespace).await {
                         Ok(res) => {
-                            info!("accepted: {:?} on {}", req.operation, name);
+                            info!("accepted: {:?} on {}", req.operation, obj_name);
                             res
                         }
                         Err(err) => {
-                            warn!("denied: {:?} on {} ({})", req.operation, name, err);
+                            warn!("denied: {:?} on {} ({})", req.operation, obj_name, err);
                             res.deny(err.to_string())
                         }
                     };
-                };
+                }
+                Err(err) => {
+                    warn!("denied: {:?} on {} ({})", req.operation, obj_name, err);
+                    res = res.deny(err.to_string());
+                }
             }
+        }
+        _ => {
+            debug!("skipped: {:?}", req.operation);
         }
     }
     // Wrap the AdmissionResponse wrapped in an AdmissionReview

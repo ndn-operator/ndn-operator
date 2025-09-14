@@ -279,10 +279,10 @@ pub fn is_router_created() -> impl Condition<Router> {
 
 pub fn is_router_online() -> impl Condition<Router> {
     |obj: Option<&Router>| {
-        if let Some(router) = obj {
-            if let Some(status) = &router.status {
-                return status.online;
-            }
+        if let Some(router) = obj
+            && let Some(status) = &router.status
+        {
+            return status.online;
         }
         false
     }
@@ -290,10 +290,10 @@ pub fn is_router_online() -> impl Condition<Router> {
 
 pub fn is_router_initialized() -> impl Condition<Router> {
     |obj: Option<&Router>| {
-        if let Some(router) = obj {
-            if let Some(status) = &router.status {
-                return status.initialized;
-            }
+        if let Some(router) = obj
+            && let Some(status) = &router.status
+        {
+            return status.initialized;
         }
         false
     }
