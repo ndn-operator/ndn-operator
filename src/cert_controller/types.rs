@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
 pub static CERTIFICATE_FINALIZER: &str = "certificate.named-data.net/finalizer";
+pub static EXTERNAL_CERTIFICATE_FINALIZER: &str = "external-certificate.named-data.net/finalizer";
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -107,4 +108,46 @@ pub struct CertStatus {
     pub secret: Option<String>,
     /// Indicates whether the certificate is currently valid (not expired)
     pub valid: bool,
+}
+
+/// ExternalCertificate is a custom resource representing a pre-generated certificate imported via a Secret
+#[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+#[kube(
+    group = "named-data.net",
+    version = "v1alpha1",
+    kind = "ExternalCertificate",
+    derive = "Default",
+    namespaced,
+    shortname = "ecert",
+    doc = "ExternalCertificate imports an existing NDN certificate from a Kubernetes Secret",
+    printcolumn = r#"{"name":"Secret","jsonPath":".spec.secretName","type":"string"}"#,
+    printcolumn = r#"{"name":"Cert","jsonPath":".status.cert.name","type":"string"}"#,
+    printcolumn = r#"{"name":"Valid","jsonPath":".status.cert.valid","type":"boolean"}"#,
+    printcolumn = r#"{"name":"Key Exists","jsonPath":".status.keyExists","type":"boolean"}"#,
+    printcolumn = r#"{"name":"Cert Exists","jsonPath":".status.certExists","type":"boolean"}"#,
+    status = "ExternalCertificateStatus"
+)]
+pub struct ExternalCertificateSpec {
+    /// The name of the Secret containing the external certificate (and optionally key)
+    /// The Secret must contain `ndn.cert` and may contain `ndn.key`
+    pub secret_name: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema, Conditions)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalCertificateStatus {
+    /// The status of the certificate key (if provided)
+    pub key: KeyStatus,
+    /// The status of the certificate file
+    pub cert: CertStatus,
+    /// Indicates whether the key exists in the referenced Secret
+    pub key_exists: bool,
+    /// Indicates whether the cert exists in the referenced Secret
+    pub cert_exists: bool,
+    /// Standard Kubernetes-style conditions for this external certificate
+    /// - Ready: key and cert are present and cert is valid
+    /// - KeyReady: key secret available/usable (proxy by key_exists)
+    /// - CertReady: cert available and valid
+    pub conditions: Option<Vec<K8sCondition>>,
 }

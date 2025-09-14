@@ -15,7 +15,7 @@ use std::sync::Arc;
 use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
-use super::Certificate;
+use super::{Certificate, ExternalCertificate};
 use crate::{Error, Result, cert_controller::CERTIFICATE_FINALIZER};
 
 // Context for our reconciler
@@ -37,6 +37,31 @@ async fn reconcile_cert(cert: Arc<Certificate>, ctx: Arc<Context>) -> Result<Act
     finalizer(
         &api_cert,
         CERTIFICATE_FINALIZER,
+        cert,
+        async |event| match event {
+            Finalizer::Apply(cert) => cert.reconcile(ctx.clone()).await,
+            Finalizer::Cleanup(cert) => cert.cleanup(ctx.clone()).await,
+        },
+    )
+    .await
+    .map_err(|e| Error::FinalizerError(Box::new(e)))
+}
+
+async fn reconcile_external_cert(
+    cert: Arc<ExternalCertificate>,
+    ctx: Arc<Context>,
+) -> Result<Action> {
+    let ns = cert.namespace().unwrap();
+    let api_cert: Api<ExternalCertificate> = Api::namespaced(ctx.client.clone(), &ns);
+
+    info!(
+        "Reconciling ExternalCertificate \"{}\" in {}",
+        cert.name_any(),
+        ns
+    );
+    finalizer(
+        &api_cert,
+        crate::cert_controller::EXTERNAL_CERTIFICATE_FINALIZER,
         cert,
         async |event| match event {
             Finalizer::Apply(cert) => cert.reconcile(ctx.clone()).await,
@@ -97,17 +122,32 @@ fn certificate_error_policy(_: Arc<Certificate>, error: &Error, _: Arc<Context>)
     Action::requeue(Duration::from_secs(5 * 60))
 }
 
+fn external_certificate_error_policy(
+    _: Arc<ExternalCertificate>,
+    error: &Error,
+    _: Arc<Context>,
+) -> Action {
+    warn!("reconcile failed: {:?}", error);
+    Action::requeue(Duration::from_secs(5 * 60))
+}
+
 pub async fn run_cert(state: State) {
     let client = Client::try_default()
         .await
         .expect("Expected a valid KUBECONFIG environment variable");
     let api_cert = Api::<Certificate>::all(client.clone());
+    let api_ecert = Api::<ExternalCertificate>::all(client.clone());
     if let Err(e) = api_cert.list(&ListParams::default().limit(1)).await {
         error!("Certificate CRD is not queryable; {e:?}. Is the CRD installed?");
         info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
         std::process::exit(1);
     }
-    Controller::new(api_cert, watcher::Config::default().any_semantic())
+    if let Err(e) = api_ecert.list(&ListParams::default().limit(1)).await {
+        error!("ExternalCertificate CRD is not queryable; {e:?}. Is the CRD installed?");
+        info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
+        std::process::exit(1);
+    }
+    let cert_ctrl = Controller::new(api_cert, watcher::Config::default().any_semantic())
         .shutdown_on_signal()
         .run(
             reconcile_cert,
@@ -115,6 +155,17 @@ pub async fn run_cert(state: State) {
             state.to_context(client.clone()).await,
         )
         .filter_map(async |x| std::result::Result::ok(x))
-        .for_each(async |_| ())
-        .await;
+        .for_each(async |_| ());
+
+    let ecert_ctrl = Controller::new(api_ecert, watcher::Config::default().any_semantic())
+        .shutdown_on_signal()
+        .run(
+            reconcile_external_cert,
+            external_certificate_error_policy,
+            state.to_context(client.clone()).await,
+        )
+        .filter_map(async |x| std::result::Result::ok(x))
+        .for_each(async |_| ());
+
+    tokio::join!(cert_ctrl, ecert_ctrl).0;
 }

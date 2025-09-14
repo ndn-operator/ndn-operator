@@ -1,6 +1,6 @@
 use kube::CustomResourceExt;
 use operator::{
-    cert_controller::Certificate,
+    cert_controller::{Certificate, ExternalCertificate},
     network_controller::{Network, Router},
 };
 
@@ -29,6 +29,11 @@ fn main() {
     std::fs::write(
         format!("{}/certificate.yaml", args.output),
         serde_yaml::to_string(&Certificate::crd()).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+        format!("{}/external_certificate.yaml", args.output),
+        serde_yaml::to_string(&ExternalCertificate::crd()).unwrap(),
     )
     .unwrap();
 }

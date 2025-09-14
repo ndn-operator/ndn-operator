@@ -2,7 +2,10 @@ use super::Context;
 use crate::conditions::Conditions;
 use crate::{
     Error, Result,
-    cert_controller::{Certificate, CertificateSpec, IssuerRef, is_cert_valid},
+    cert_controller::{
+        Certificate, CertificateSpec, ExternalCertificate, IssuerRef, is_cert_valid,
+        is_external_cert_valid,
+    },
     events_helper::emit_info,
     helper::get_my_image,
     network_controller::{CertificateRef, Router, RouterSpec},
@@ -124,6 +127,31 @@ impl TrustAnchorRef {
                     .and_then(|s| s.cert.name)
                     .ok_or(Error::OtherError(
                         "Certificate name not found in status".to_string(),
+                    ))
+            }
+            "ExternalCertificate" => {
+                let api_cert = Api::<ExternalCertificate>::namespaced(
+                    client.clone(),
+                    &self.namespace.clone().unwrap_or(default_ns.to_string()),
+                );
+                info!("Waiting for the external certificate to be valid...");
+                let cert_valid =
+                    await_condition(api_cert.clone(), &self.name, is_external_cert_valid());
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(3), cert_valid)
+                    .await
+                    .map_err(|e| {
+                        Error::OtherError(format!(
+                            "Timeout while waiting for external certificate to be valid: {e}"
+                        ))
+                    })?;
+                let cert = api_cert
+                    .get_status(&self.name)
+                    .await
+                    .map_err(Error::KubeError)?;
+                cert.status
+                    .and_then(|s| s.cert.name)
+                    .ok_or(Error::OtherError(
+                        "ExternalCertificate name not found in status".to_string(),
                     ))
             }
             _ => Err(Error::OtherError(format!(
