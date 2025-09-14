@@ -73,8 +73,18 @@ pub async fn pod_cleanup(pod: Arc<Pod>, ctx: Context) -> Result<Action> {
     let pod_name = pod.name_any();
     let router_name = pod_name.clone();
 
-    let router = api_rt.get(&router_name).await.map_err(Error::KubeError)?;
-    let cert_ref = router.spec.cert;
+    // Try to fetch the router to discover its certificate reference, but don't fail if it's already gone
+    let cert_ref = match api_rt.get(&router_name).await {
+        Ok(router) => router.spec.cert,
+        Err(kube::Error::Api(ae)) if ae.code == 404 => {
+            info!(
+                "Router {} already deleted; skipping cert discovery",
+                router_name
+            );
+            None
+        }
+        Err(e) => return Err(Error::KubeError(e)),
+    };
     let dp = DeleteParams::default();
     info!("Deleting router for pod {}", pod_name);
     let _ = api_rt
