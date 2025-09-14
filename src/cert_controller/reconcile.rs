@@ -10,6 +10,7 @@ use kube::{
     api::{Api, ObjectMeta, Patch, PatchParams, PostParams, ResourceExt},
 };
 use serde_json::json;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use tracing::*;
 
 use super::Context;
@@ -32,10 +33,30 @@ impl Certificate {
         let status = self.status().cloned().unwrap_or_default();
         let mut action = Action::await_change();
 
+        // Start with a working copy and surface RenewalRequired immediately from current status
+        let mut _working = status.clone();
+        upsert_condition_bool(
+            &mut _working.conditions,
+            "RenewalRequired",
+            _working.needs_renewal,
+            if _working.needs_renewal { "RenewalWindow" } else { "NotInWindow" },
+            None,
+            self.metadata.generation.unwrap_or(0) as i64,
+        );
+
         let new_status = match status.key_exists {
             true => match status.cert_exists {
                 true => match status.needs_renewal {
                     true => {
+                        // Mark Issuing while we create a new certificate
+                        upsert_condition_bool(
+                            &mut _working.conditions,
+                            "Issuing",
+                            true,
+                            "Renewing",
+                            Some("Renewal is in progress"),
+                            self.metadata.generation.unwrap_or(0) as i64,
+                        );
                         self.create_cert(ctx.clone(), &ns, &status, &api_secret)
                             .await?
                     }
@@ -45,10 +66,21 @@ impl Certificate {
                             .to_std()
                             .map_err(|e| Error::OtherError(e.to_string()))?;
                         action = Action::requeue(requeue_duration);
-                        self.validate_cert(&status)?
+                        let mut st = self.validate_cert(&status)?;
+                        // Update KeyReady and CertReady based on current flags
+                        set_availability_conditions(self, &mut st);
+                        st
                     }
                 },
                 false => {
+                    upsert_condition_bool(
+                        &mut _working.conditions,
+                        "Issuing",
+                        true,
+                        "Issuing",
+                        Some("Issuing certificate"),
+                        self.metadata.generation.unwrap_or(0) as i64,
+                    );
                     self.create_cert(ctx.clone(), &ns, &status, &api_secret)
                         .await?
                 }
@@ -98,6 +130,15 @@ impl Certificate {
         new_status.cert.valid = valid_until > now;
         let renew_before = self.renew_before(status)?;
         new_status.needs_renewal = renew_before <= now;
+        // Reflect RenewalRequired condition
+        upsert_condition_bool(
+            &mut new_status.conditions,
+            "RenewalRequired",
+            new_status.needs_renewal,
+            if new_status.needs_renewal { "RenewalWindow" } else { "NotInWindow" },
+            None,
+            self.metadata.generation.unwrap_or(0) as i64,
+        );
         Ok(new_status)
     }
 
@@ -125,6 +166,15 @@ impl Certificate {
                         .status
                         .as_ref()
                         .ok_or(Error::OtherError("Issuer status not found".to_string()))?;
+                    // IssuerReady true as we could fetch usable status
+                    upsert_condition_bool(
+                        &mut new_status.conditions,
+                        "IssuerReady",
+                        true,
+                        "IssuerResolved",
+                        Some("Issuer status available"),
+                        self.metadata.generation.unwrap_or(0) as i64,
+                    );
                     let key_secret_name = issuer_status
                         .key_exists
                         .then(|| issuer_status.key.secret.clone())
@@ -138,6 +188,14 @@ impl Certificate {
                     (key_secret_name, cert_secret_name, self_signed)
                 }
                 _ => {
+                    upsert_condition_bool(
+                        &mut new_status.conditions,
+                        "IssuerReady",
+                        false,
+                        "UnsupportedIssuerKind",
+                        Some(&format!("Unsupported issuer kind: {}", issuer_ref.kind)),
+                        self.metadata.generation.unwrap_or(0) as i64,
+                    );
                     return Err(Error::OtherError(format!(
                         "Unsupported issuer kind: {}",
                         issuer_ref.kind
@@ -221,6 +279,16 @@ impl Certificate {
         new_status.cert.secret = Some(cert_secret.name_any());
         new_status.cert.valid = true;
         new_status.cert_exists = true;
+        // Update availability conditions and finish issuing
+        set_availability_conditions(self, &mut new_status);
+        upsert_condition_bool(
+            &mut new_status.conditions,
+            "Issuing",
+            false,
+            "Renewed",
+            Some("Certificate (re)issued"),
+            self.metadata.generation.unwrap_or(0) as i64,
+        );
         Ok(new_status)
     }
 
@@ -257,6 +325,15 @@ impl Certificate {
         new_status.key.sig_type = Some(key_info.sig_type);
         new_status.key.secret = Some(secret.name_any());
         new_status.key_exists = true;
+        // KeyReady becomes true when key is generated and secret is created
+        upsert_condition_bool(
+            &mut new_status.conditions,
+            "KeyReady",
+            true,
+            "KeyGenerated",
+            Some("Key secret created"),
+            self.metadata.generation.unwrap_or(0) as i64,
+        );
         Ok(new_status)
     }
 
@@ -282,6 +359,82 @@ impl Certificate {
             },
             string_data: Some(data.clone()),
             ..Secret::default()
+        }
+    }
+}
+
+fn set_availability_conditions(cert: &Certificate, status: &mut CertificateStatus) {
+    let observed_gen = cert.metadata.generation.unwrap_or(0) as i64;
+    let key_ready = status.key_exists && status.key.secret.is_some();
+    let cert_ready = status.cert_exists && status.cert.valid && status.cert.secret.is_some();
+    upsert_condition_bool(
+        &mut status.conditions,
+        "KeyReady",
+        key_ready,
+        if key_ready { "KeyAvailable" } else { "KeyMissing" },
+        None,
+        observed_gen,
+    );
+    upsert_condition_bool(
+        &mut status.conditions,
+        "CertReady",
+        cert_ready,
+        if cert_ready { "CertAvailable" } else { "CertMissingOrInvalid" },
+        None,
+        observed_gen,
+    );
+}
+
+fn upsert_condition_bool(
+    target: &mut Option<Vec<K8sCondition>>,
+    type_: &str,
+    status: bool,
+    reason: &str,
+    message: Option<&str>,
+    observed_generation: i64,
+) {
+    let cond = make_condition(type_, status, reason, message.unwrap_or(""), observed_generation);
+    upsert_condition(target, cond);
+}
+
+fn make_condition(
+    type_: &str,
+    status: bool,
+    reason: &str,
+    message: &str,
+    observed_generation: i64,
+) -> K8sCondition {
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
+    let now = Time(Utc::now());
+    K8sCondition {
+        type_: type_.to_string(),
+        status: if status { "True".to_string() } else { "False".to_string() },
+        reason: reason.to_string(),
+        message: message.to_string(),
+        observed_generation: Some(observed_generation),
+        last_transition_time: now,
+    }
+}
+
+fn upsert_condition(target: &mut Option<Vec<K8sCondition>>, new_cond: K8sCondition) {
+    match target {
+        Some(vec) => {
+            if let Some(pos) = vec.iter().position(|c| c.type_ == new_cond.type_) {
+                if vec[pos].status != new_cond.status {
+                    vec[pos] = new_cond;
+                } else {
+                    let last_transition_time = vec[pos].last_transition_time.clone();
+                    vec[pos].reason = new_cond.reason;
+                    vec[pos].message = new_cond.message;
+                    vec[pos].observed_generation = new_cond.observed_generation;
+                    vec[pos].last_transition_time = last_transition_time;
+                }
+            } else {
+                vec.push(new_cond);
+            }
+        }
+        None => {
+            *target = Some(vec![new_cond]);
         }
     }
 }
@@ -356,6 +509,7 @@ mod tests {
             key_exists: true,
             cert_exists: true,
             needs_renewal: false,
+            conditions: None,
         });
         cert
     }
@@ -433,6 +587,7 @@ mod tests {
             key_exists: true,
             cert_exists: true,
             needs_renewal: false,
+            conditions: None,
         });
         let status = cert.status.clone().unwrap();
         let new_status = cert.validate_cert(&status).expect("validate");
