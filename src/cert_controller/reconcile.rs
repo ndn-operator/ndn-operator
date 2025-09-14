@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration as StdDuration};
 use chrono::{DateTime, Duration, Utc};
 use duration_string::DurationString;
 use k8s_openapi::api::core::v1::Secret;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use kube::core::object::HasStatus;
 use kube::runtime::{controller::Action, wait::Condition};
 use kube::{
@@ -10,7 +11,6 @@ use kube::{
     api::{Api, ObjectMeta, Patch, PatchParams, PostParams, ResourceExt},
 };
 use serde_json::json;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use tracing::*;
 
 use super::Context;
@@ -39,7 +39,11 @@ impl Certificate {
             &mut _working.conditions,
             "RenewalRequired",
             _working.needs_renewal,
-            if _working.needs_renewal { "RenewalWindow" } else { "NotInWindow" },
+            if _working.needs_renewal {
+                "RenewalWindow"
+            } else {
+                "NotInWindow"
+            },
             None,
             self.metadata.generation.unwrap_or(0) as i64,
         );
@@ -135,7 +139,11 @@ impl Certificate {
             &mut new_status.conditions,
             "RenewalRequired",
             new_status.needs_renewal,
-            if new_status.needs_renewal { "RenewalWindow" } else { "NotInWindow" },
+            if new_status.needs_renewal {
+                "RenewalWindow"
+            } else {
+                "NotInWindow"
+            },
             None,
             self.metadata.generation.unwrap_or(0) as i64,
         );
@@ -371,7 +379,11 @@ fn set_availability_conditions(cert: &Certificate, status: &mut CertificateStatu
         &mut status.conditions,
         "KeyReady",
         key_ready,
-        if key_ready { "KeyAvailable" } else { "KeyMissing" },
+        if key_ready {
+            "KeyAvailable"
+        } else {
+            "KeyMissing"
+        },
         None,
         observed_gen,
     );
@@ -379,7 +391,11 @@ fn set_availability_conditions(cert: &Certificate, status: &mut CertificateStatu
         &mut status.conditions,
         "CertReady",
         cert_ready,
-        if cert_ready { "CertAvailable" } else { "CertMissingOrInvalid" },
+        if cert_ready {
+            "CertAvailable"
+        } else {
+            "CertMissingOrInvalid"
+        },
         None,
         observed_gen,
     );
@@ -390,15 +406,23 @@ fn set_availability_conditions(cert: &Certificate, status: &mut CertificateStatu
     } else {
         // Build a concise message about missing prerequisites
         let mut missing: Vec<&str> = Vec::new();
-        if !key_ready { missing.push("Key"); }
-        if !cert_ready { missing.push("Cert"); }
+        if !key_ready {
+            missing.push("Key");
+        }
+        if !cert_ready {
+            missing.push("Cert");
+        }
         Some(format!("Missing prerequisites: {}", missing.join(", ")))
     };
     upsert_condition_bool(
         &mut status.conditions,
         "Ready",
         ready,
-        if ready { "Ready" } else { "PrerequisitesNotReady" },
+        if ready {
+            "Ready"
+        } else {
+            "PrerequisitesNotReady"
+        },
         not_ready_msg.as_deref(),
         observed_gen,
     );
@@ -412,7 +436,13 @@ fn upsert_condition_bool(
     message: Option<&str>,
     observed_generation: i64,
 ) {
-    let cond = make_condition(type_, status, reason, message.unwrap_or(""), observed_generation);
+    let cond = make_condition(
+        type_,
+        status,
+        reason,
+        message.unwrap_or(""),
+        observed_generation,
+    );
     upsert_condition(target, cond);
 }
 
@@ -427,7 +457,11 @@ fn make_condition(
     let now = Time(Utc::now());
     K8sCondition {
         type_: type_.to_string(),
-        status: if status { "True".to_string() } else { "False".to_string() },
+        status: if status {
+            "True".to_string()
+        } else {
+            "False".to_string()
+        },
         reason: reason.to_string(),
         message: message.to_string(),
         observed_generation: Some(observed_generation),
