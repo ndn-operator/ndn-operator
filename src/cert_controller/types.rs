@@ -1,3 +1,4 @@
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -67,6 +68,14 @@ pub struct CertificateStatus {
     pub cert_exists: bool,
     /// Indicates whether the certificate needs renewal
     pub needs_renewal: bool,
+    /// Standard Kubernetes-style conditions for this certificate
+    /// - Ready: key and cert are present and cert is valid
+    /// - IssuerReady: issuer is resolved and usable (best-effort)
+    /// - KeyReady: key secret available/usable (proxy by key_exists)
+    /// - CertReady: cert available and valid
+    /// - RenewalRequired: within renew window
+    /// - Issuing: an issuance/renewal is in progress
+    pub conditions: Option<Vec<K8sCondition>>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
