@@ -45,7 +45,7 @@ impl Certificate {
                 "NotInWindow"
             },
             None,
-            self.metadata.generation.unwrap_or(0) as i64,
+            self.metadata.generation.unwrap_or(0),
         );
 
         let new_status = match status.key_exists {
@@ -59,7 +59,7 @@ impl Certificate {
                             true,
                             "Renewing",
                             Some("Renewal is in progress"),
-                            self.metadata.generation.unwrap_or(0) as i64,
+                            self.metadata.generation.unwrap_or(0),
                         );
                         self.create_cert(ctx.clone(), &ns, &status, &api_secret)
                             .await?
@@ -83,7 +83,7 @@ impl Certificate {
                         true,
                         "Issuing",
                         Some("Issuing certificate"),
-                        self.metadata.generation.unwrap_or(0) as i64,
+                        self.metadata.generation.unwrap_or(0),
                     );
                     self.create_cert(ctx.clone(), &ns, &status, &api_secret)
                         .await?
@@ -145,7 +145,7 @@ impl Certificate {
                 "NotInWindow"
             },
             None,
-            self.metadata.generation.unwrap_or(0) as i64,
+            self.metadata.generation.unwrap_or(0),
         );
         Ok(new_status)
     }
@@ -181,7 +181,7 @@ impl Certificate {
                         true,
                         "IssuerResolved",
                         Some("Issuer status available"),
-                        self.metadata.generation.unwrap_or(0) as i64,
+                        self.metadata.generation.unwrap_or(0),
                     );
                     let key_secret_name = issuer_status
                         .key_exists
@@ -202,7 +202,7 @@ impl Certificate {
                         false,
                         "UnsupportedIssuerKind",
                         Some(&format!("Unsupported issuer kind: {}", issuer_ref.kind)),
-                        self.metadata.generation.unwrap_or(0) as i64,
+                        self.metadata.generation.unwrap_or(0),
                     );
                     return Err(Error::OtherError(format!(
                         "Unsupported issuer kind: {}",
@@ -295,7 +295,7 @@ impl Certificate {
             false,
             "Renewed",
             Some("Certificate (re)issued"),
-            self.metadata.generation.unwrap_or(0) as i64,
+            self.metadata.generation.unwrap_or(0),
         );
         Ok(new_status)
     }
@@ -340,7 +340,7 @@ impl Certificate {
             true,
             "KeyGenerated",
             Some("Key secret created"),
-            self.metadata.generation.unwrap_or(0) as i64,
+            self.metadata.generation.unwrap_or(0),
         );
         Ok(new_status)
     }
@@ -372,7 +372,7 @@ impl Certificate {
 }
 
 fn set_availability_conditions(cert: &Certificate, status: &mut CertificateStatus) {
-    let observed_gen = cert.metadata.generation.unwrap_or(0) as i64;
+    let observed_gen = cert.metadata.generation.unwrap_or(0);
     let key_ready = status.key_exists && status.key.secret.is_some();
     let cert_ready = status.cert_exists && status.cert.valid && status.cert.secret.is_some();
     upsert_condition_bool(
