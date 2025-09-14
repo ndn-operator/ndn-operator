@@ -48,48 +48,44 @@ impl Certificate {
             self.metadata.generation.unwrap_or(0),
         );
 
-        let new_status = match status.key_exists {
-            true => match status.cert_exists {
-                true => match status.needs_renewal {
-                    true => {
-                        // Mark Issuing while we create a new certificate
-                        upsert_condition_bool(
-                            &mut _working.conditions,
-                            "Issuing",
-                            true,
-                            "Renewing",
-                            Some("Renewal is in progress"),
-                            self.metadata.generation.unwrap_or(0),
-                        );
-                        self.create_cert(ctx.clone(), &ns, &status, &api_secret)
-                            .await?
-                    }
-                    false => {
-                        let valid_until = self.valid_until(&status)?;
-                        let requeue_duration = (valid_until - Utc::now())
-                            .to_std()
-                            .map_err(|e| Error::OtherError(e.to_string()))?;
-                        action = Action::requeue(requeue_duration);
-                        let mut st = self.validate_cert(&status)?;
-                        // Update KeyReady and CertReady based on current flags
-                        set_availability_conditions(self, &mut st);
-                        st
-                    }
-                },
-                false => {
-                    upsert_condition_bool(
-                        &mut _working.conditions,
-                        "Issuing",
-                        true,
-                        "Issuing",
-                        Some("Issuing certificate"),
-                        self.metadata.generation.unwrap_or(0),
-                    );
-                    self.create_cert(ctx.clone(), &ns, &status, &api_secret)
-                        .await?
-                }
-            },
-            false => self.create_key(ctx.clone(), &status, &api_secret).await?,
+        let new_status = match (status.key_exists, status.cert_exists, status.needs_renewal) {
+            (true, true, true) => {
+                // Mark Issuing while we create a new certificate
+                upsert_condition_bool(
+                    &mut _working.conditions,
+                    "Issuing",
+                    true,
+                    "Renewing",
+                    Some("Renewal is in progress"),
+                    self.metadata.generation.unwrap_or(0),
+                );
+                self.create_cert(ctx.clone(), &ns, &status, &api_secret)
+                    .await?
+            }
+            (true, true, false) => {
+                let valid_until = self.valid_until(&status)?;
+                let requeue_duration = (valid_until - Utc::now())
+                    .to_std()
+                    .map_err(|e| Error::OtherError(e.to_string()))?;
+                action = Action::requeue(requeue_duration);
+                let mut st = self.validate_cert(&status)?;
+                // Update KeyReady and CertReady based on current flags
+                set_availability_conditions(self, &mut st);
+                st
+            }
+            (true, false, _) => {
+                upsert_condition_bool(
+                    &mut _working.conditions,
+                    "Issuing",
+                    true,
+                    "Issuing",
+                    Some("Issuing certificate"),
+                    self.metadata.generation.unwrap_or(0),
+                );
+                self.create_cert(ctx.clone(), &ns, &status, &api_secret)
+                    .await?
+            }
+            (false, _, _) => self.create_key(ctx.clone(), &status, &api_secret).await?,
         };
 
         let serverside = PatchParams::apply(CERTIFICATE_MANAGER_NAME);
