@@ -383,6 +383,25 @@ fn set_availability_conditions(cert: &Certificate, status: &mut CertificateStatu
         None,
         observed_gen,
     );
+    // Overall Ready reflects both Key and Cert readiness (independent of RenewalRequired)
+    let ready = key_ready && cert_ready;
+    let not_ready_msg = if ready {
+        None
+    } else {
+        // Build a concise message about missing prerequisites
+        let mut missing: Vec<&str> = Vec::new();
+        if !key_ready { missing.push("Key"); }
+        if !cert_ready { missing.push("Cert"); }
+        Some(format!("Missing prerequisites: {}", missing.join(", ")))
+    };
+    upsert_condition_bool(
+        &mut status.conditions,
+        "Ready",
+        ready,
+        if ready { "Ready" } else { "PrerequisitesNotReady" },
+        not_ready_msg.as_deref(),
+        observed_gen,
+    );
 }
 
 fn upsert_condition_bool(
@@ -592,5 +611,57 @@ mod tests {
         let status = cert.status.clone().unwrap();
         let new_status = cert.validate_cert(&status).expect("validate");
         assert!(new_status.needs_renewal, "Inside custom renew window");
+    }
+
+    #[test]
+    fn ready_true_when_key_and_cert_ready() {
+        let valid_until = Utc::now() + Duration::days(30);
+        let cert = base_cert(valid_until);
+        // Compute availability which will set Ready
+        let mut status = cert.status.clone().unwrap();
+        set_availability_conditions(&cert, &mut status);
+        let ready = status
+            .conditions
+            .unwrap_or_default()
+            .into_iter()
+            .find(|c| c.type_ == "Ready")
+            .expect("Ready condition present");
+        assert_eq!(ready.status, "True");
+    }
+
+    #[test]
+    fn ready_false_when_cert_invalid() {
+        // expired cert
+        let cert = base_cert(Utc::now() - Duration::hours(1));
+        let mut status = cert.status.clone().unwrap();
+        // Ensure validate_cert marks invalid
+        status = cert.validate_cert(&status).expect("validate");
+        set_availability_conditions(&cert, &mut status);
+        let ready = status
+            .conditions
+            .unwrap_or_default()
+            .into_iter()
+            .find(|c| c.type_ == "Ready")
+            .expect("Ready condition present");
+        assert_eq!(ready.status, "False");
+    }
+
+    #[test]
+    fn ready_independent_of_renewal_required() {
+        // inside renew window but still valid
+        let valid_until = Utc::now() + Duration::days(5); // within default 7d window
+        let cert = base_cert(valid_until);
+        let status = cert.status.clone().unwrap();
+        let mut new_status = cert.validate_cert(&status).expect("validate");
+        // needs_renewal should be true now, but Ready should remain true as long as key/cert are good
+        assert!(new_status.needs_renewal);
+        set_availability_conditions(&cert, &mut new_status);
+        let ready = new_status
+            .conditions
+            .unwrap_or_default()
+            .into_iter()
+            .find(|c| c.type_ == "Ready")
+            .expect("Ready condition present");
+        assert_eq!(ready.status, "True");
     }
 }
