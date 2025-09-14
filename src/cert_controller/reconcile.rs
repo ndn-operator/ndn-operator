@@ -411,8 +411,6 @@ fn set_availability_conditions(cert: &Certificate, status: &mut CertificateStatu
     );
 }
 
-// local helpers removed; using crate::conditions
-
 pub fn is_cert_valid() -> impl Condition<Certificate> {
     |obj: Option<&Certificate>| {
         obj.and_then(|c| c.status.clone())

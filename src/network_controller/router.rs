@@ -391,8 +391,6 @@ impl Router {
     }
 }
 
-// local helpers removed; using crate::conditions
-
 pub fn is_router_created() -> impl Condition<Router> {
     |obj: Option<&Router>| obj.is_some()
 }
