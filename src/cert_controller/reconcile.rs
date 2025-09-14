@@ -256,7 +256,6 @@ impl Certificate {
             .await
             .map_err(Error::KubeError)?;
 
-        // Emit event for certificate creation
         emit_info(
             &ctx.recorder,
             self,
@@ -270,6 +269,9 @@ impl Certificate {
         )
         .await;
 
+        new_status.cert.name = Some(cert_info.name);
+        new_status.cert.sig_type = Some(cert_info.sig_type);
+        new_status.cert.signer_key = Some(cert_info.signer_key);
         new_status.cert.issued_at = Some(cert_info.validity.0.to_rfc3339());
         new_status.cert.valid_until = Some(cert_info.validity.1.to_rfc3339());
         new_status.cert.secret = Some(cert_secret.name_any());
