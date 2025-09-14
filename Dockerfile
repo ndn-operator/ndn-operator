@@ -4,6 +4,7 @@ ARG TARGET
 WORKDIR /usr/src/app
 
 COPY src src
+COPY operator-derive operator-derive
 COPY Cargo.toml Cargo.toml
 
 RUN cargo build --target=${TARGET} --release
