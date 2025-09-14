@@ -12,7 +12,7 @@ pub struct KeyInfo {
 }
 
 impl KeyInfo {
-    fn from_key_text(key_text: String) -> Result<Self, Error> {
+    pub(crate) fn from_key_text(key_text: String) -> Result<Self, Error> {
         let mut name = None;
         let mut sig_type = None;
         for line in key_text.lines() {
@@ -50,7 +50,7 @@ pub struct CertInfo {
 }
 
 impl CertInfo {
-    fn from_cert_text(cert_text: String) -> Result<Self, Error> {
+    pub(crate) fn from_cert_text(cert_text: String) -> Result<Self, Error> {
         let mut name = None;
         let mut sig_type = None;
         let mut signer_key = None;

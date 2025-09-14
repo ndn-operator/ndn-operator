@@ -74,7 +74,8 @@ spec:
                   kind:
                     description: |-
                       The kind of the issuer, e.g., "Certificate".
-                      Currently only "Certificate" is supported
+                      "Certificate" and "ExternalCertificate" are supported
+                      "ExternalCertificate" must have a key to sign certificates
                     type: string
                   name:
                     description: The name of the issuer, e.g., "router-cert"
@@ -96,7 +97,7 @@ spec:
                     kind:
                       description: |-
                         The kind of the trust anchor, e.g., "Certificate".
-                        Currently only "Certificate" is supported
+                        "Certificate" and "ExternalCertificate" are supported
                       type: string
                     name:
                       description: The name of the trust anchor, e.g., "router-cert"
