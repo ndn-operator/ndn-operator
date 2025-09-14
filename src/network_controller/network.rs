@@ -7,6 +7,7 @@ use crate::{
     network_controller::{CertificateRef, Router, RouterSpec},
 };
 use duration_string::DurationString;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use k8s_openapi::{
     api::{
         apps::v1::DaemonSet,
@@ -166,6 +167,11 @@ impl Default for OperatorSpec {
 pub struct NetworkStatus {
     /// Indicates whether the DaemonSet for the network has been created
     pub ds_created: Option<bool>,
+    /// Standard Kubernetes-style conditions for this network
+    /// - Ready: DSCreated && RBACReady
+    /// - DSCreated: DaemonSet successfully applied
+    /// - RBACReady: ServiceAccount, Role, RoleBinding successfully applied
+    pub conditions: Option<Vec<K8sCondition>>,
 }
 
 impl Network {
@@ -211,6 +217,17 @@ impl Network {
             )
             .await
             .map_err(Error::KubeError)?;
+        // RBAC applied successfully
+        let mut conditions: Option<Vec<K8sCondition>> = None;
+        let observed_gen = self.metadata.generation.unwrap_or(0);
+        upsert_condition_bool(
+            &mut conditions,
+            "RBACReady",
+            true,
+            "Applied",
+            Some("ServiceAccount, Role, RoleBinding applied"),
+            observed_gen,
+        );
         // Create DaemonSet
         let ds = api_ds
             .patch(&self.name_any(), &serverside, &Patch::Apply(ds_data))
@@ -229,10 +246,33 @@ impl Network {
             )),
         )
         .await;
-        // Update the status of the Network
+        // Update conditions and status of the Network
+        upsert_condition_bool(
+            &mut conditions,
+            "DSCreated",
+            true,
+            "Created",
+            Some("DaemonSet applied"),
+            observed_gen,
+        );
+        // Compute Ready
+        let ready = true; // both RBACReady and DSCreated just set true above
+        upsert_condition_bool(
+            &mut conditions,
+            "Ready",
+            ready,
+            if ready {
+                "Ready"
+            } else {
+                "PrerequisitesNotReady"
+            },
+            None,
+            observed_gen,
+        );
         let status = json!({
-            "status": NetworkStatus {
-                ds_created: Some(true),
+            "status": {
+                "dsCreated": true,
+                "conditions": conditions
             }
         });
         let _o = api_nw
@@ -472,5 +512,69 @@ impl Network {
             ..Certificate::default()
         };
         Ok(cert)
+    }
+}
+
+fn upsert_condition_bool(
+    target: &mut Option<Vec<K8sCondition>>,
+    type_: &str,
+    status: bool,
+    reason: &str,
+    message: Option<&str>,
+    observed_generation: i64,
+) {
+    let cond = make_condition(
+        type_,
+        status,
+        reason,
+        message.unwrap_or(""),
+        observed_generation,
+    );
+    upsert_condition(target, cond);
+}
+
+fn make_condition(
+    type_: &str,
+    status: bool,
+    reason: &str,
+    message: &str,
+    observed_generation: i64,
+) -> K8sCondition {
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
+    let now = Time(std::time::SystemTime::now().into());
+    K8sCondition {
+        type_: type_.to_string(),
+        status: if status {
+            "True".to_string()
+        } else {
+            "False".to_string()
+        },
+        reason: reason.to_string(),
+        message: message.to_string(),
+        observed_generation: Some(observed_generation),
+        last_transition_time: now,
+    }
+}
+
+fn upsert_condition(target: &mut Option<Vec<K8sCondition>>, new_cond: K8sCondition) {
+    match target {
+        Some(vec) => {
+            if let Some(pos) = vec.iter().position(|c| c.type_ == new_cond.type_) {
+                if vec[pos].status != new_cond.status {
+                    vec[pos] = new_cond;
+                } else {
+                    let last_transition_time = vec[pos].last_transition_time.clone();
+                    vec[pos].reason = new_cond.reason;
+                    vec[pos].message = new_cond.message;
+                    vec[pos].observed_generation = new_cond.observed_generation;
+                    vec[pos].last_transition_time = last_transition_time;
+                }
+            } else {
+                vec.push(new_cond);
+            }
+        }
+        None => {
+            *target = Some(vec![new_cond]);
+        }
     }
 }

@@ -12,7 +12,7 @@ use operator::{
     dv::RouterConfig,
     fw::{FacesConfig, ForwarderConfig, UdpConfig, UnixConfig},
     helper::{Decoded, decode_secret},
-    network_controller::{Network, Router, RouterFaces, RouterStatus, is_router_created},
+    network_controller::{Network, Router, RouterFaces, is_router_created},
     telemetry,
 };
 use serde_json::json;
@@ -220,11 +220,11 @@ async fn main() -> anyhow::Result<()> {
         udp6: { ip6.map(|ip6| format!("udp://[{ip6}]:{udp_unicast_port}")) },
         tcp6: None,
     };
+    // Patch only intended fields to avoid resetting other status fields (e.g., online, conditions)
     let patch_status = json!({
-        "status": RouterStatus {
-            faces,
-            initialized: true,
-            ..RouterStatus::default()
+        "status": {
+            "faces": faces,
+            "initialized": true
         }
     });
     debug!("Patch status: {:?}", patch_status);
