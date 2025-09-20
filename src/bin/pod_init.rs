@@ -10,7 +10,7 @@ use operator::{
     Error, NdndConfig,
     cert_controller::{Certificate, is_cert_valid},
     dv::RouterConfig,
-    fw::{FacesConfig, ForwarderConfig, UdpConfig, UnixConfig},
+    fw::{FacesConfig, ForwarderConfig, TcpConfig, UdpConfig, UnixConfig, WebSocketConfig},
     helper::{Decoded, decode_secret},
     network_controller::{Network, Router, RouterFaces, is_router_created},
     telemetry,
@@ -28,14 +28,29 @@ struct Args {
     output: String,
 }
 
-fn gen_config(
+#[derive(Debug, Clone)]
+struct GenConfigParams {
     network_name: String,
     router_name: String,
-    udp_unicast_port: i32,
+    udp_unicast_port: u16,
     keychain: String,
     socket_path: Option<String>,
     trust_anchors: Option<Vec<String>>,
-) -> NdndConfig {
+    tcp_port: Option<u16>,
+    ws_port: Option<u16>,
+}
+
+fn gen_config(params: GenConfigParams) -> NdndConfig {
+    let GenConfigParams {
+        network_name,
+        router_name,
+        udp_unicast_port,
+        keychain,
+        socket_path,
+        trust_anchors,
+        tcp_port,
+        ws_port,
+    } = params;
     NdndConfig {
         dv: RouterConfig {
             network: format!("/{network_name}"),
@@ -51,9 +66,22 @@ fn gen_config(
                     port_unicast: Some(udp_unicast_port),
                     ..UdpConfig::default()
                 }),
+                tcp: tcp_port.map(|p| TcpConfig {
+                    enabled: true,
+                    port_unicast: p,
+                    ..TcpConfig::default()
+                }),
                 unix: Some(UnixConfig {
                     enabled: true,
                     socket_path: socket_path.unwrap_or("/run/nfd/nfd.sock".to_string()),
+                }),
+                websocket: ws_port.map(|p| WebSocketConfig {
+                    enabled: true,
+                    bind: "0.0.0.0".to_string(),
+                    port: p,
+                    tls_enabled: false,
+                    tls_cert: None,
+                    tls_key: None,
                 }),
                 ..FacesConfig::default()
             },
@@ -70,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
     let network_namespace = env::var("NDN_NETWORK_NAMESPACE")?;
     let router_name = env::var("NDN_ROUTER_NAME")?;
     let certificate_name = env::var("NDN_ROUTER_CERT_NAME").unwrap_or(router_name.clone());
-    let udp_unicast_port = env::var("NDN_UDP_UNICAST_PORT")?.parse::<i32>()?;
+    let udp_unicast_port = env::var("NDN_UDP_UNICAST_PORT")?.parse::<u16>()?;
     let socket_path = env::var("NDN_SOCKET_PATH").ok();
     let keychain_dir = env::var("NDN_KEYS_DIR")?;
     let insecure = env::var("NDN_INSECURE")?.parse::<bool>()?;
@@ -110,15 +138,29 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    // Determine tcp/websocket ports from Network faces
+    let tcp_port: Option<u16> = my_network
+        .spec
+        .faces
+        .as_ref()
+        .and_then(|f| f.tcp.as_ref().map(|t| t.port));
+    let ws_port: Option<u16> = my_network
+        .spec
+        .faces
+        .as_ref()
+        .and_then(|f| f.websocket.as_ref().map(|w| w.port));
+
     // Generate Ndnd config
-    let config = gen_config(
-        network_name.clone(),
-        router_name.clone(),
+    let config = gen_config(GenConfigParams {
+        network_name: network_name.clone(),
+        router_name: router_name.clone(),
         udp_unicast_port,
         keychain,
         socket_path,
         trust_anchors,
-    );
+        tcp_port,
+        ws_port,
+    });
     let config_str = serde_yaml::to_string(&config)?;
     std::fs::write(args.output, config_str.clone())?;
     info!("{}", config_str);

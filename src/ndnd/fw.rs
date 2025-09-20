@@ -70,8 +70,8 @@ impl Default for FacesConfig {
 pub struct UdpConfig {
     pub enabled_unicast: bool,
     pub enabled_multicast: bool,
-    pub port_unicast: Option<i32>,
-    pub port_multicast: Option<i32>,
+    pub port_unicast: Option<u16>,
+    pub port_multicast: Option<u16>,
     pub multicast_address_ipv4: Option<String>,
     pub multicast_address_ipv6: Option<String>,
     pub lifetime: Option<u64>,
@@ -97,7 +97,7 @@ impl Default for UdpConfig {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TcpConfig {
     pub enabled: bool,
-    pub port_unicast: i32,
+    pub port_unicast: u16,
     pub lifetime: Option<u64>,
     pub reconnect_interval: Option<u64>,
 }

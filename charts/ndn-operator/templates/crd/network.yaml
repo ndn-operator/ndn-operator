@@ -33,6 +33,51 @@ spec:
         properties:
           spec:
             properties:
+              faces:
+                description: Public faces to expose from router pods
+                nullable: true
+                properties:
+                  tcp:
+                    nullable: true
+                    properties:
+                      port:
+                        format: uint16
+                        maximum: 65535.0
+                        minimum: 0.0
+                        type: integer
+                      serviceTemplate:
+                        default:
+                          type: ''
+                        properties:
+                          type:
+                            default: LoadBalancer
+                            description: 'Service type to expose this face (default: LoadBalancer)'
+                            type: string
+                        type: object
+                    required:
+                    - port
+                    type: object
+                  websocket:
+                    nullable: true
+                    properties:
+                      port:
+                        format: uint16
+                        maximum: 65535.0
+                        minimum: 0.0
+                        type: integer
+                      serviceTemplate:
+                        default:
+                          type: ''
+                        properties:
+                          type:
+                            default: LoadBalancer
+                            description: 'Service type to expose this face (default: LoadBalancer)'
+                            type: string
+                        type: object
+                    required:
+                    - port
+                    type: object
+                type: object
               ndnd:
                 default:
                   image: ghcr.io/named-data/ndnd:latest
@@ -118,7 +163,9 @@ spec:
                 description: |-
                   The UDP unicast port for the nodes.
                   Must be unique across all networks in the cluster.
-                format: int32
+                format: uint16
+                maximum: 65535.0
+                minimum: 0.0
                 type: integer
             required:
             - prefix
