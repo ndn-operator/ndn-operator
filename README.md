@@ -66,10 +66,8 @@ flowchart BT
     end
     r_A <--udp--> r_B <--udp--> r_C
   end
-  ext([External Connection]):::dotted --tcp--> N
-  ext --ws--> N
-
-
+  s1([K8S Service]):::dotted --tcp--> N
+  s2([K8S Service]):::dotted --ws--> N
   classDef dotted stroke-dasharray: 5 5
 ```
 
