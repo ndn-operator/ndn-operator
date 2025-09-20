@@ -49,7 +49,7 @@ NDN Operator has two main services:
 * Controller. It utilizes DaemonSets to configure and run `ndnd` on each node
 * Injector. It uses mutating webhooks to mount ndnd socket into every pod with label `named-data.net/inject: "true"`
 ```mermaid
-flowchart LR
+flowchart BT
   subgraph N[Network]
   direction LR
     subgraph r_A[Node A]
@@ -66,6 +66,8 @@ flowchart LR
     end
     r_A <--udp--> r_B <--udp--> r_C
   end
+  ext([External Connection]):::dotted --tcp--> N
+  ext --ws--> N
 
 
   classDef dotted stroke-dasharray: 5 5
@@ -82,7 +84,7 @@ flowchart LR
     * Pod annotations, assigning it to a particular network
 1. TLS ✅
     * Self-signed root CA
-1. Advanced use 🚧
-    * Expose NDN faces outside
-    * Obtain certificates from Testbed
-    * K8S resources to manage NDN faces, strategies and links
+    * External Certificates (from Testbed)
+1. Advanced use
+    * Expose NDN faces outside ✅
+    * K8S resources to manage NDN faces, strategies and links 🚧
