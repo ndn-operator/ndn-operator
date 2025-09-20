@@ -14,6 +14,7 @@ fn test_network_spec() -> NetworkSpec {
         }),
         router_cert_issuer: None,
         trust_anchors: None,
+        faces: None,
     }
 }
 

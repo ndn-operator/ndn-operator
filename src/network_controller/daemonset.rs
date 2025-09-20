@@ -94,8 +94,8 @@ pub fn create_owned_daemonset(
                                 ..SecurityContext::default()
                             }),
                             ports: Some(vec![ContainerPort {
-                                container_port: nw.spec.udp_unicast_port,
-                                host_port: Some(nw.spec.udp_unicast_port),
+                                container_port: nw.spec.udp_unicast_port as i32,
+                                host_port: Some(nw.spec.udp_unicast_port as i32),
                                 protocol: Some("UDP".to_string()),
                                 ..ContainerPort::default()
                             }]),
