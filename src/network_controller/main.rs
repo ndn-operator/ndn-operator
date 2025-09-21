@@ -18,7 +18,8 @@ use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
 use super::{
-    DS_LABEL_KEY, NETWORK_FINALIZER, Network, ROUTER_FINALIZER, Router, pod_apply, pod_cleanup,
+    DS_LABEL_KEY, NETWORK_FINALIZER, NeighborLink, Network, ROUTER_FINALIZER, Router, pod_apply,
+    pod_cleanup,
 };
 use crate::{Error, Result, network_controller::POD_FINALIZER};
 
@@ -136,6 +137,11 @@ fn router_error_policy(_: Arc<Router>, error: &Error, _: Arc<Context>) -> Action
     Action::requeue(Duration::from_secs(5 * 60))
 }
 
+fn neighbor_link_error_policy(_: Arc<NeighborLink>, error: &Error, _: Arc<Context>) -> Action {
+    warn!("reconcile failed: {:?}", error);
+    Action::requeue(Duration::from_secs(5 * 60))
+}
+
 fn pod_error_policy(_: Arc<Pod>, error: &Error, _: Arc<Context>) -> Action {
     warn!("reconcile failed: {:?}", error);
     Action::requeue(Duration::from_secs(60))
@@ -178,6 +184,28 @@ pub async fn run_router(state: State) {
         .run(
             reconcile_router,
             router_error_policy,
+            state.to_context(client.clone()).await,
+        )
+        .filter_map(async |x| std::result::Result::ok(x))
+        .for_each(async |_| ())
+        .await;
+}
+
+pub async fn run_neighbor_link(state: State) {
+    let client = Client::try_default()
+        .await
+        .expect("Expected a valid KUBECONFIG environment variable");
+    let api_nl = Api::<NeighborLink>::all(client.clone());
+    if let Err(e) = api_nl.list(&ListParams::default().limit(1)).await {
+        error!("NeighborLink CRD is not queryable; {e:?}. Is the CRD installed?");
+        info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
+        std::process::exit(1);
+    }
+    Controller::new(api_nl, watcher::Config::default().any_semantic())
+        .shutdown_on_signal()
+        .run(
+            super::neighbor_link::reconcile_neighbor_link,
+            neighbor_link_error_policy,
             state.to_context(client.clone()).await,
         )
         .filter_map(async |x| std::result::Result::ok(x))

@@ -12,7 +12,7 @@ use operator::{
     dv::RouterConfig,
     fw::{FacesConfig, ForwarderConfig, TcpConfig, UdpConfig, UnixConfig, WebSocketConfig},
     helper::{Decoded, decode_secret},
-    network_controller::{Network, Router, RouterFaces, is_router_created},
+    network_controller::{IpFamily, Network, Router, is_router_created},
     telemetry,
 };
 use serde_json::json;
@@ -256,16 +256,45 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Patch the status of the existing router
-    let faces = RouterFaces {
-        udp4: { ip4.map(|ip4| format!("udp://{ip4}:{udp_unicast_port}")) },
-        tcp4: None,
-        udp6: { ip6.map(|ip6| format!("udp://[{ip6}]:{udp_unicast_port}")) },
-        tcp6: None,
+    // Decide which UDP face to publish based on Network ipFamily.
+    // We only publish ONE UDP face per router to prevent duplicate inter-router links.
+    // Preference is driven by Network.spec.ipFamily with a graceful fallback to the other family if the preferred IP is absent on the node.
+    let (udp4_face, udp6_face) = match my_network.spec.ip_family.unwrap_or(IpFamily::IPv4) {
+        IpFamily::IPv4 => {
+            // Prefer IPv4; if not available, fallback to IPv6
+            if let Some(ip) = ip4.clone() {
+                (Some(format!("udp://{ip}:{udp_unicast_port}")), None)
+            } else {
+                (
+                    None,
+                    ip6.clone()
+                        .map(|ip| format!("udp://[{ip}]:{udp_unicast_port}")),
+                )
+            }
+        }
+        IpFamily::IPv6 => {
+            // Prefer IPv6; if not available, fallback to IPv4
+            if let Some(ip) = ip6.clone() {
+                (None, Some(format!("udp://[{ip}]:{udp_unicast_port}")))
+            } else {
+                (
+                    ip4.clone()
+                        .map(|ip| format!("udp://{ip}:{udp_unicast_port}")),
+                    None,
+                )
+            }
+        }
+    };
+    // Compute the single inner_face value to publish
+    let inner_face: Option<String> = match (udp4_face, udp6_face) {
+        (Some(f), None) => Some(f),
+        (None, Some(f)) => Some(f),
+        _ => None,
     };
     // Patch only intended fields to avoid resetting other status fields (e.g., online, conditions)
     let patch_status = json!({
         "status": {
-            "faces": faces,
+            "innerFace": inner_face,
             "initialized": true
         }
     });

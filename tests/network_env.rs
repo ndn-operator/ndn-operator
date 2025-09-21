@@ -5,6 +5,7 @@ fn default_ndnd_image() {
     let spec = NetworkSpec {
         prefix: "/test".into(),
         udp_unicast_port: 6363,
+        ip_family: None,
         node_selector: None,
         ndnd: NdndSpec::default(),
         operator: None,
