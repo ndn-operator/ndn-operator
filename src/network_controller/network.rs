@@ -73,6 +73,10 @@ pub struct NetworkSpec {
     /// The UDP unicast port for the nodes.
     /// Must be unique across all networks in the cluster.
     pub udp_unicast_port: u16,
+    /// Preferred IP family for inter-router UDP faces. If unset, defaults to IPv4.
+    /// When set to IPv4, only an IPv4 UDP face will be published per router (with IPv6 as a fallback if IPv4 is not available on the node).
+    /// When set to IPv6, only an IPv6 UDP face will be published per router (with IPv4 as a fallback if IPv6 is not available on the node).
+    pub ip_family: Option<IpFamily>,
     /// The node selector for the network, used to schedule the network controller on specific nodes
     pub node_selector: Option<BTreeMap<String, String>>,
     /// The NDND image to use for the network controller
@@ -223,6 +227,15 @@ impl Default for NetworkWebSocketFaceSpec {
 pub struct FacesSpec {
     pub tcp: Option<NetworkTcpFaceSpec>,
     pub websocket: Option<NetworkWebSocketFaceSpec>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum IpFamily {
+    #[serde(rename = "IPv4")]
+    IPv4,
+    #[serde(rename = "IPv6")]
+    IPv6,
 }
 
 #[skip_serializing_none]
