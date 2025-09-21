@@ -12,7 +12,7 @@ use operator::{
     dv::RouterConfig,
     fw::{FacesConfig, ForwarderConfig, TcpConfig, UdpConfig, UnixConfig, WebSocketConfig},
     helper::{Decoded, decode_secret},
-    network_controller::{IpFamily, Network, Router, RouterFaces, is_router_created},
+    network_controller::{IpFamily, Network, Router, is_router_created},
     telemetry,
 };
 use serde_json::json;
@@ -285,16 +285,16 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     };
-    let faces = RouterFaces {
-        udp4: udp4_face,
-        tcp4: None,
-        udp6: udp6_face,
-        tcp6: None,
+    // Compute the single inner_face value to publish
+    let inner_face: Option<String> = match (udp4_face, udp6_face) {
+        (Some(f), None) => Some(f),
+        (None, Some(f)) => Some(f),
+        _ => None,
     };
     // Patch only intended fields to avoid resetting other status fields (e.g., online, conditions)
     let patch_status = json!({
         "status": {
-            "faces": faces,
+            "innerFace": inner_face,
             "initialized": true
         }
     });

@@ -11,7 +11,7 @@ use operator::{
     telemetry,
 };
 use std::process::Command;
-use std::{collections::BTreeSet, env};
+use std::{collections::BTreeMap, env};
 use tracing::*;
 
 #[tokio::main]
@@ -35,40 +35,49 @@ async fn main() -> anyhow::Result<()> {
         .await
         .map_err(Error::KubeError)?;
     info!("Patched router status: {:?}", patched.status);
-    // Watch the neighbors in my_router's status and run `/ndnd dv link-create <URL>` or `/ndnd dv link-destroy <URL>` when it changes
+    // Watch the inner neighbors in my_router's status and run `/ndnd dv link-create <URL>` or `/ndnd dv link-destroy <URL>` when it changes
     let wc = watcher::Config::default().fields(format!("metadata.name={my_router_name}").as_str());
-    let mut neighbors = BTreeSet::<String>::new();
+    let mut neighbors = BTreeMap::<String, String>::new();
     let watcher = watcher(api_router, wc).applied_objects();
     pin_mut!(watcher);
     while let Some(router) = watcher.try_next().await? {
         let new_neighbors = match router.status {
-            Some(ref status) => status.neighbors.clone(),
-            None => BTreeSet::<String>::new(),
+            Some(ref status) => status.inner_neighbors.clone(),
+            None => BTreeMap::<String, String>::new(),
         };
-        let added_neighbors: BTreeSet<String> =
-            new_neighbors.difference(&neighbors).cloned().collect();
-        let removed_neighbors: BTreeSet<String> =
-            neighbors.difference(&new_neighbors).cloned().collect();
-        for neighbor in added_neighbors {
-            info!("Creating link to {}", neighbor);
+        // Determine added and removed by keys
+        let added_keys: Vec<String> = new_neighbors
+            .keys()
+            .filter(|k| !neighbors.contains_key(*k))
+            .cloned()
+            .collect();
+        let removed_keys: Vec<String> = neighbors
+            .keys()
+            .filter(|k| !new_neighbors.contains_key(*k))
+            .cloned()
+            .collect();
+        for key in added_keys {
+            let uri = new_neighbors.get(&key).cloned().unwrap_or_default();
+            info!("Creating link to {} -> {}", key, uri);
             Command::new("/ndnd")
                 .arg("dv")
                 .arg("link-create")
-                .arg(neighbor)
+                .arg(uri)
                 .output()
                 .expect("Failed to create link");
         }
-        for neighbor in removed_neighbors {
-            info!("Destroying link to {}", neighbor);
+        for key in removed_keys {
+            let uri = neighbors.get(&key).cloned().unwrap_or_default();
+            info!("Destroying link to {} -> {}", key, uri);
             Command::new("/ndnd")
                 .arg("dv")
                 .arg("link-destroy")
-                .arg(neighbor)
+                .arg(uri)
                 .output()
                 .expect("Failed to destroy link");
         }
         neighbors = new_neighbors;
-        info!("Updated neighbors: {:?}", neighbors);
+        info!("Updated inner neighbors: {:?}", neighbors);
     }
     Ok(())
 }
