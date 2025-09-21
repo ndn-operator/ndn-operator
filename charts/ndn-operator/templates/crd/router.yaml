@@ -127,6 +127,12 @@ spec:
                 default: false
                 description: Router is online and ready to serve
                 type: boolean
+              outerNeighbors:
+                additionalProperties:
+                  type: string
+                default: {}
+                description: 'Map of external neighbors from NeighborLink resources. Key: NeighborLink name, Value: face URI'
+                type: object
             type: object
         required:
         - spec

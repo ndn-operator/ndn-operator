@@ -70,6 +70,8 @@ pub struct RouterStatus {
     pub inner_face: Option<String>,
     /// Map of neighbor routers and their internal face URIs. Key: router name, Value: face URI
     pub inner_neighbors: BTreeMap<String, String>,
+    /// Map of external neighbors from NeighborLink resources. Key: NeighborLink name, Value: face URI
+    pub outer_neighbors: BTreeMap<String, String>,
     /// Standard Kubernetes-style conditions for this router
     /// - Ready: Initialized && Online && FaceReady
     /// - Initialized: init container is complete

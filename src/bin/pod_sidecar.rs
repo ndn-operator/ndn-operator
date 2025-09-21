@@ -42,7 +42,12 @@ async fn main() -> anyhow::Result<()> {
     pin_mut!(watcher);
     while let Some(router) = watcher.try_next().await? {
         let new_neighbors = match router.status {
-            Some(ref status) => status.inner_neighbors.clone(),
+            Some(ref status) => {
+                let mut merged = BTreeMap::<String, String>::new();
+                merged.extend(status.inner_neighbors.clone());
+                merged.extend(status.outer_neighbors.clone());
+                merged
+            }
             None => BTreeMap::<String, String>::new(),
         };
         // Determine added and removed by keys
