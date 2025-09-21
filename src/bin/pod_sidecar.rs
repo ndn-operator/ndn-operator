@@ -33,7 +33,6 @@ fn diff_uris(
     (added, removed)
 }
 
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     telemetry::init().await;
@@ -63,7 +62,9 @@ async fn main() -> anyhow::Result<()> {
     pin_mut!(watcher);
     while let Some(router) = watcher.try_next().await? {
         let new_neighbors = match router.status {
-            Some(ref status) => merge_neighbor_uris(&status.inner_neighbors, &status.outer_neighbors),
+            Some(ref status) => {
+                merge_neighbor_uris(&status.inner_neighbors, &status.outer_neighbors)
+            }
             None => BTreeSet::<String>::new(),
         };
         // Determine added and removed by URIs
@@ -90,50 +91,47 @@ async fn main() -> anyhow::Result<()> {
         info!("Updated neighbors: {:?}", neighbors);
     }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::{BTreeMap, BTreeSet};
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::collections::{BTreeMap, BTreeSet};
 
-    #[test]
-    fn test_merge_neighbor_uris_dedup() {
-        let mut inner = BTreeMap::new();
-        inner.insert("r1".to_string(), "udp://10.0.0.1:6363".to_string());
-        inner.insert("r2".to_string(), "udp://10.0.0.2:6363".to_string());
-        let mut outer = BTreeMap::new();
-        // duplicate URI should be deduped by set
-        outer.insert("nl-a".to_string(), "udp://10.0.0.2:6363".to_string());
-        outer.insert("nl-b".to_string(), "udp://203.0.113.1:6363".to_string());
+        #[test]
+        fn test_merge_neighbor_uris_dedup() {
+            let mut inner = BTreeMap::new();
+            inner.insert("r1".to_string(), "udp://10.0.0.1:6363".to_string());
+            inner.insert("r2".to_string(), "udp://10.0.0.2:6363".to_string());
+            let mut outer = BTreeMap::new();
+            // duplicate URI should be deduped by set
+            outer.insert("nl-a".to_string(), "udp://10.0.0.2:6363".to_string());
+            outer.insert("nl-b".to_string(), "udp://203.0.113.1:6363".to_string());
 
-        let merged = merge_neighbor_uris(&inner, &outer);
-        assert_eq!(merged.len(), 3);
-        assert!(merged.contains("udp://10.0.0.1:6363"));
-        assert!(merged.contains("udp://10.0.0.2:6363"));
-        assert!(merged.contains("udp://203.0.113.1:6363"));
+            let merged = merge_neighbor_uris(&inner, &outer);
+            assert_eq!(merged.len(), 3);
+            assert!(merged.contains("udp://10.0.0.1:6363"));
+            assert!(merged.contains("udp://10.0.0.2:6363"));
+            assert!(merged.contains("udp://203.0.113.1:6363"));
+        }
+
+        #[test]
+        fn test_diff_uris_added_removed() {
+            let old: BTreeSet<String> = ["udp://10.0.0.1:6363", "udp://10.0.0.2:6363"]
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect();
+            let new: BTreeSet<String> = [
+                "udp://10.0.0.2:6363", // kept
+                "udp://10.0.0.3:6363", // added
+            ]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+            let (added, removed) = diff_uris(&old, &new);
+            assert_eq!(added.len(), 1);
+            assert!(added.contains("udp://10.0.0.3:6363"));
+            assert_eq!(removed.len(), 1);
+            assert!(removed.contains("udp://10.0.0.1:6363"));
+        }
     }
-
-    #[test]
-    fn test_diff_uris_added_removed() {
-        let old: BTreeSet<String> = [
-            "udp://10.0.0.1:6363",
-            "udp://10.0.0.2:6363",
-        ]
-        .into_iter()
-        .map(|s| s.to_string())
-        .collect();
-        let new: BTreeSet<String> = [
-            "udp://10.0.0.2:6363", // kept
-            "udp://10.0.0.3:6363", // added
-        ]
-        .into_iter()
-        .map(|s| s.to_string())
-        .collect();
-        let (added, removed) = diff_uris(&old, &new);
-        assert_eq!(added.len(), 1);
-        assert!(added.contains("udp://10.0.0.3:6363"));
-        assert_eq!(removed.len(), 1);
-        assert!(removed.contains("udp://10.0.0.1:6363"));
-    }
-}
     Ok(())
 }
