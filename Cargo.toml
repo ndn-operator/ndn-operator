@@ -31,7 +31,7 @@ duration-string = { version = "0.5.3", features = ["serde"] }
 futures = "0.3.31"
 json-patch = "4.1.0"
 local-ip-address = "0.6.5"
-schemars = "1.0.4"
+schemars = "1.1.0"
 serde = "1.0.228"
 serde_json = "1.0.145"
 serde_with = "3.15.1"
