@@ -24,7 +24,7 @@ jobs:
       contents: read
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Dump GitHub context
       env:
         GITHUB_CONTEXT: ${{ toJson(github) }}
@@ -60,7 +60,7 @@ jobs:
       digest: ${{ steps.push.outputs.digest }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Update Cargo.toml
       uses: colathro/toml-editor@1.1.0
       if: github.event_name == 'push'
@@ -113,7 +113,7 @@ jobs:
       digest: ${{ steps.push.outputs.digest }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Update Cargo.toml
       uses: colathro/toml-editor@1.1.0
       if: github.event_name == 'push'
