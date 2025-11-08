@@ -25,7 +25,7 @@ rules:
   resources: ["events"]
   verbs: ["create", "patch"]
 - apiGroups: ["apps"]
-  resources: ["daemonsets"]
+  resources: ["daemonsets", "services"]
   verbs: ["create", "patch", "delete"]
 - apiGroups: [""]
   resources: ["serviceaccounts"]

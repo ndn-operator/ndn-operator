@@ -9,7 +9,7 @@ spec:
   ndnd:
     image: ghcr.io/named-data/ndnd:latest
   operator:
-    image: ghcr.io/ndn-operator/ndn-operator:sha-7b99dc4
+    image: ghcr.io/ndn-operator/ndn-operator:latest
   routerCertIssuer:
     kind: ExternalCertificate
     name: mynetwork-cert
