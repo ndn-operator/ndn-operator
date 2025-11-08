@@ -15,7 +15,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use k8s_openapi::{
     api::{
         apps::v1::DaemonSet,
-        core::v1::ServiceAccount,
+        core::v1::{Service, ServiceAccount},
         rbac::v1::{PolicyRule, Role, RoleBinding, RoleRef, Subject},
     },
     apimachinery::pkg::apis::meta::v1::ObjectMeta,
@@ -72,7 +72,11 @@ pub struct NetworkSpec {
     pub prefix: String,
     /// The UDP unicast port for the nodes.
     /// Must be unique across all networks in the cluster.
-    pub udp_unicast_port: i32,
+    pub udp_unicast_port: u16,
+    /// Preferred IP family for inter-router UDP faces. If unset, defaults to IPv4.
+    /// When set to IPv4, only an IPv4 UDP face will be published per router (with IPv6 as a fallback if IPv4 is not available on the node).
+    /// When set to IPv6, only an IPv6 UDP face will be published per router (with IPv4 as a fallback if IPv6 is not available on the node).
+    pub ip_family: Option<IpFamily>,
     /// The node selector for the network, used to schedule the network controller on specific nodes
     pub node_selector: Option<BTreeMap<String, String>>,
     /// The NDND image to use for the network controller
@@ -86,6 +90,8 @@ pub struct NetworkSpec {
     pub router_cert_issuer: Option<IssuerRef>,
     /// The trust anchors for the network, used for validating certificates
     pub trust_anchors: Option<Vec<TrustAnchorRef>>,
+    /// Public faces to expose from router pods
+    pub faces: Option<FacesSpec>,
 }
 
 #[skip_serializing_none]
@@ -160,6 +166,76 @@ impl TrustAnchorRef {
             ))),
         }
     }
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FaceServiceTemplateSpec {
+    /// Service type to expose this face (default: LoadBalancer)
+    #[serde(default = "default_service_type")]
+    pub type_: String,
+}
+
+fn default_service_type() -> String {
+    "LoadBalancer".to_string()
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkTcpFaceSpec {
+    pub port: u16,
+    #[serde(default)]
+    pub service_template: FaceServiceTemplateSpec,
+}
+
+impl Default for NetworkTcpFaceSpec {
+    fn default() -> Self {
+        Self {
+            port: 6363,
+            service_template: FaceServiceTemplateSpec {
+                type_: default_service_type(),
+            },
+        }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkWebSocketFaceSpec {
+    pub port: u16,
+    #[serde(default)]
+    pub service_template: FaceServiceTemplateSpec,
+}
+
+impl Default for NetworkWebSocketFaceSpec {
+    fn default() -> Self {
+        Self {
+            port: 9696,
+            service_template: FaceServiceTemplateSpec {
+                type_: default_service_type(),
+            },
+        }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FacesSpec {
+    pub tcp: Option<NetworkTcpFaceSpec>,
+    pub websocket: Option<NetworkWebSocketFaceSpec>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum IpFamily {
+    #[serde(rename = "IPv4")]
+    IPv4,
+    #[serde(rename = "IPv6")]
+    IPv6,
 }
 
 #[skip_serializing_none]
@@ -286,6 +362,83 @@ impl Network {
             Some("DaemonSet applied"),
             observed_gen,
         );
+        // Create/Update Services for configured faces
+        if let Some(faces) = &self.spec.faces {
+            let api_svc: Api<Service> =
+                Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
+            if let Some(tcp) = &faces.tcp {
+                let svc_name = format!("{}-tcp", self.name_any());
+                let oref = self.controller_owner_ref(&()).unwrap();
+                let labels = BTreeMap::from([(DS_LABEL_KEY.to_string(), self.name_any())]);
+                let svc = Service {
+                    metadata: ObjectMeta {
+                        name: Some(svc_name.clone()),
+                        namespace: self.namespace(),
+                        owner_references: Some(vec![oref.clone()]),
+                        labels: Some(labels.clone()),
+                        ..ObjectMeta::default()
+                    },
+                    spec: Some(k8s_openapi::api::core::v1::ServiceSpec {
+                        type_: Some(tcp.service_template.type_.clone()),
+                        selector: Some(labels.clone()),
+                        ports: Some(vec![k8s_openapi::api::core::v1::ServicePort {
+                            name: Some("tcp".to_string()),
+                            protocol: Some("TCP".to_string()),
+                            port: tcp.port as i32,
+                            target_port: Some(
+                                k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(
+                                    tcp.port as i32,
+                                ),
+                            ),
+                            ..Default::default()
+                        }]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+                let serverside = PatchParams::apply(NETWORK_MANAGER_NAME).force();
+                let _ = api_svc
+                    .patch(&svc_name, &serverside, &Patch::Apply(&svc))
+                    .await
+                    .map_err(Error::KubeError)?;
+            }
+            if let Some(ws) = &faces.websocket {
+                let svc_name = format!("{}-ws", self.name_any());
+                let oref = self.controller_owner_ref(&()).unwrap();
+                let labels = BTreeMap::from([(DS_LABEL_KEY.to_string(), self.name_any())]);
+                let svc = Service {
+                    metadata: ObjectMeta {
+                        name: Some(svc_name.clone()),
+                        namespace: self.namespace(),
+                        owner_references: Some(vec![oref.clone()]),
+                        labels: Some(labels.clone()),
+                        ..ObjectMeta::default()
+                    },
+                    spec: Some(k8s_openapi::api::core::v1::ServiceSpec {
+                        type_: Some(ws.service_template.type_.clone()),
+                        selector: Some(labels.clone()),
+                        ports: Some(vec![k8s_openapi::api::core::v1::ServicePort {
+                            name: Some("websocket".to_string()),
+                            protocol: Some("TCP".to_string()),
+                            port: ws.port as i32,
+                            target_port: Some(
+                                k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(
+                                    ws.port as i32,
+                                ),
+                            ),
+                            ..Default::default()
+                        }]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+                let serverside = PatchParams::apply(NETWORK_MANAGER_NAME).force();
+                let _ = api_svc
+                    .patch(&svc_name, &serverside, &Patch::Apply(&svc))
+                    .await
+                    .map_err(Error::KubeError)?;
+            }
+        }
         // Compute Ready
         let ready = true; // both RBACReady and DSCreated just set true above
         s.upsert_bool(
@@ -448,6 +601,20 @@ impl Network {
                     api_groups: Some(vec!["".to_string()]),
                     resources: Some(vec!["secrets".to_string()]),
                     verbs: vec!["get".to_string()],
+                    ..PolicyRule::default()
+                },
+                PolicyRule {
+                    api_groups: Some(vec!["".to_string()]),
+                    resources: Some(vec!["services".to_string()]),
+                    verbs: vec![
+                        "get".to_string(),
+                        "list".to_string(),
+                        "watch".to_string(),
+                        "create".to_string(),
+                        "update".to_string(),
+                        "patch".to_string(),
+                        "delete".to_string(),
+                    ],
                     ..PolicyRule::default()
                 },
             ]),

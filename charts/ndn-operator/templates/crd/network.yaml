@@ -33,6 +33,62 @@ spec:
         properties:
           spec:
             properties:
+              faces:
+                description: Public faces to expose from router pods
+                nullable: true
+                properties:
+                  tcp:
+                    nullable: true
+                    properties:
+                      port:
+                        format: uint16
+                        maximum: 65535.0
+                        minimum: 0.0
+                        type: integer
+                      serviceTemplate:
+                        default:
+                          type: ''
+                        properties:
+                          type:
+                            default: LoadBalancer
+                            description: 'Service type to expose this face (default: LoadBalancer)'
+                            type: string
+                        type: object
+                    required:
+                    - port
+                    type: object
+                  websocket:
+                    nullable: true
+                    properties:
+                      port:
+                        format: uint16
+                        maximum: 65535.0
+                        minimum: 0.0
+                        type: integer
+                      serviceTemplate:
+                        default:
+                          type: ''
+                        properties:
+                          type:
+                            default: LoadBalancer
+                            description: 'Service type to expose this face (default: LoadBalancer)'
+                            type: string
+                        type: object
+                    required:
+                    - port
+                    type: object
+                type: object
+              ipFamily:
+                description: |-
+                  Preferred IP family for inter-router UDP faces. If unset, defaults to IPv4.
+                  When set to IPv4, only an IPv4 UDP face will be published per router (with IPv6 as a fallback if IPv4 is not available on the node).
+                  When set to IPv6, only an IPv6 UDP face will be published per router (with IPv4 as a fallback if IPv6 is not available on the node).
+                enum:
+                - IPv4
+                - IPv6
+                - null
+                nullable: true
+                type: string
               ndnd:
                 default:
                   image: ghcr.io/named-data/ndnd:latest
@@ -118,7 +174,9 @@ spec:
                 description: |-
                   The UDP unicast port for the nodes.
                   Must be unique across all networks in the cluster.
-                format: int32
+                format: uint16
+                maximum: 65535.0
+                minimum: 0.0
                 type: integer
             required:
             - prefix

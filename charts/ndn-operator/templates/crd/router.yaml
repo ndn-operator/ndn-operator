@@ -72,10 +72,10 @@ spec:
               conditions:
                 description: |-
                   Standard Kubernetes-style conditions for this router
-                  - Ready: Initialized && Online && FacesReady
+                  - Ready: Initialized && Online && FaceReady
                   - Initialized: init container is complete
                   - Online: router is online
-                  - FacesReady: at least one face is present
+                  - FaceReady: at least one face is present
                   - NeighborsSynced: last neighbor propagation succeeded (informative)
                 items:
                   description: Condition contains details for one aspect of the current state of this API Resource.
@@ -109,37 +109,30 @@ spec:
                   type: object
                 nullable: true
                 type: array
-              faces:
-                default: {}
-                description: The status of the router faces
-                properties:
-                  tcp4:
-                    nullable: true
-                    type: string
-                  tcp6:
-                    nullable: true
-                    type: string
-                  udp4:
-                    nullable: true
-                    type: string
-                  udp6:
-                    nullable: true
-                    type: string
-                type: object
               initialized:
                 default: false
                 description: Router init container is complete
                 type: boolean
-              neighbors:
-                default: []
-                description: List of the neighbor routers' faces
-                items:
+              innerFace:
+                description: The internal face URI used for inter-router connectivity (single face)
+                nullable: true
+                type: string
+              innerNeighbors:
+                additionalProperties:
                   type: string
-                type: array
+                default: {}
+                description: 'Map of neighbor routers and their internal face URIs. Key: router name, Value: face URI'
+                type: object
               online:
                 default: false
                 description: Router is online and ready to serve
                 type: boolean
+              outerNeighbors:
+                additionalProperties:
+                  type: string
+                default: {}
+                description: 'Map of external neighbors from NeighborLink resources. Key: NeighborLink name, Value: face URI'
+                type: object
             type: object
         required:
         - spec

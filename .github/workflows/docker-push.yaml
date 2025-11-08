@@ -24,7 +24,7 @@ jobs:
       contents: read
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Dump GitHub context
       env:
         GITHUB_CONTEXT: ${{ toJson(github) }}
@@ -60,9 +60,9 @@ jobs:
       digest: ${{ steps.push.outputs.digest }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Update Cargo.toml
-      uses: colathro/toml-editor@1.1.0
+      uses: colathro/toml-editor@1.1.1
       if: github.event_name == 'push'
       with:
         file: Cargo.toml
@@ -96,7 +96,7 @@ jobs:
         cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-cache
         cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-cache,mode=max
     - name: Generate artifact attestation
-      uses: actions/attest-build-provenance@v2
+      uses: actions/attest-build-provenance@v3
       with:
         subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
         subject-digest: ${{ steps.push.outputs.digest }}
@@ -113,9 +113,9 @@ jobs:
       digest: ${{ steps.push.outputs.digest }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Update Cargo.toml
-      uses: colathro/toml-editor@1.1.0
+      uses: colathro/toml-editor@1.1.1
       if: github.event_name == 'push'
       with:
         file: Cargo.toml
@@ -149,7 +149,7 @@ jobs:
         cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-cache
         cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-cache,mode=max
     - name: Generate artifact attestation
-      uses: actions/attest-build-provenance@v2
+      uses: actions/attest-build-provenance@v3
       with:
         subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
         subject-digest: ${{ steps.push.outputs.digest }}
@@ -191,7 +191,7 @@ jobs:
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-amd64.outputs.digest }}
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-arm64.outputs.digest }}
     - name: Generate artifact attestation
-      uses: actions/attest-build-provenance@v2
+      uses: actions/attest-build-provenance@v3
       with:
         subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
         subject-digest: ${{ steps.manifest.outputs.digest }}

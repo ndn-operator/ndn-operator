@@ -7,6 +7,7 @@ fn test_network_spec() -> NetworkSpec {
     NetworkSpec {
         prefix: "/test".into(),
         udp_unicast_port: 6363,
+        ip_family: None,
         node_selector: None,
         ndnd: NdndSpec::default(),
         operator: Some(OperatorSpec {
@@ -14,6 +15,7 @@ fn test_network_spec() -> NetworkSpec {
         }),
         router_cert_issuer: None,
         trust_anchors: None,
+        faces: None,
     }
 }
 

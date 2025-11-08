@@ -1,9 +1,11 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 // use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 use crate::conditions::Conditions;
 use crate::events_helper::emit_info;
-use json_patch::{Patch as JsonPatch, PatchOperation, ReplaceOperation, jsonptr::PointerBuf};
+use json_patch::{
+    AddOperation, Patch as JsonPatch, PatchOperation, RemoveOperation, jsonptr::PointerBuf,
+};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use kube::{
     Api, CustomResource, Resource, ResourceExt,
@@ -64,15 +66,17 @@ pub struct RouterStatus {
     pub initialized: bool,
     /// Router is online and ready to serve
     pub online: bool,
-    /// The status of the router faces
-    pub faces: RouterFaces,
-    /// List of the neighbor routers' faces
-    pub neighbors: BTreeSet<String>,
+    /// The internal face URI used for inter-router connectivity (single face)
+    pub inner_face: Option<String>,
+    /// Map of neighbor routers and their internal face URIs. Key: router name, Value: face URI
+    pub inner_neighbors: BTreeMap<String, String>,
+    /// Map of external neighbors from NeighborLink resources. Key: NeighborLink name, Value: face URI
+    pub outer_neighbors: BTreeMap<String, String>,
     /// Standard Kubernetes-style conditions for this router
-    /// - Ready: Initialized && Online && FacesReady
+    /// - Ready: Initialized && Online && FaceReady
     /// - Initialized: init container is complete
     /// - Online: router is online
-    /// - FacesReady: at least one face is present
+    /// - FaceReady: at least one face is present
     /// - NeighborsSynced: last neighbor propagation succeeded (informative)
     pub conditions: Option<Vec<K8sCondition>>,
 }
@@ -88,41 +92,12 @@ pub struct CertificateRef {
     pub namespace: Option<String>,
 }
 
-#[skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct RouterFaces {
-    pub udp4: Option<String>,
-    pub tcp4: Option<String>,
-    pub udp6: Option<String>,
-    pub tcp6: Option<String>,
-}
-
-impl RouterFaces {
-    pub fn to_btree_set(&self) -> BTreeSet<String> {
-        let mut faces = BTreeSet::new();
-        if let Some(ref udp4) = self.udp4 {
-            faces.insert(udp4.clone());
-        }
-        if let Some(ref tcp4) = self.tcp4 {
-            faces.insert(tcp4.clone());
-        }
-        if let Some(ref udp6) = self.udp6 {
-            faces.insert(udp6.clone());
-        }
-        if let Some(ref tcp6) = self.tcp6 {
-            faces.insert(tcp6.clone());
-        }
-        faces
-    }
-}
-
 impl Router {
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
         debug!("Reconciling router: {:?}", self);
         let my_status = self.status.clone().unwrap_or_default();
         let observed_gen = self.metadata.generation.unwrap_or(0);
-        let faces_ready = !my_status.faces.to_btree_set().is_empty();
+        let face_ready = my_status.inner_face.is_some();
         // Base conditions from current status
         let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
@@ -157,16 +132,16 @@ impl Router {
             observed_gen,
         );
         conds = buf.conditions;
-        // FacesReady
+        // FaceReady
         let mut buf = my_status.clone();
         buf.conditions = conds;
         buf.upsert_bool(
-            "FacesReady",
-            faces_ready,
-            if faces_ready {
-                "FacesAvailable"
+            "FaceReady",
+            face_ready,
+            if face_ready {
+                "FaceAvailable"
             } else {
-                "FacesMissing"
+                "FaceMissing"
             },
             None,
             observed_gen,
@@ -183,7 +158,7 @@ impl Router {
             observed_gen,
         );
         conds = buf.conditions;
-        let ready = my_status.initialized && my_status.online && faces_ready;
+        let ready = my_status.initialized && my_status.online && face_ready;
         let not_ready_msg = if ready {
             None
         } else {
@@ -194,8 +169,8 @@ impl Router {
             if !my_status.online {
                 missing.push("Online");
             }
-            if !faces_ready {
-                missing.push("FacesReady");
+            if !face_ready {
+                missing.push("FaceReady");
             }
             Some(format!("Missing prerequisites: {}", missing.join(", ")))
         };
@@ -227,13 +202,13 @@ impl Router {
             return Ok(Action::await_change());
         }
 
-        // Update status.neighbors of all other routers in the network
+        // Update status.innerNeighbors of all other routers in the network
         let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let my_network_name = self
             .labels()
             .get(NETWORK_LABEL_KEY)
             .ok_or(Error::OtherError("Network label not found".to_owned()))?;
-        let my_faces = my_status.faces.to_btree_set();
+        let my_inner_face = my_status.inner_face.clone();
         let lp = ListParams::default().labels_from(
             &Expression::Equal(NETWORK_LABEL_KEY.into(), my_network_name.into()).into(),
         );
@@ -246,28 +221,43 @@ impl Router {
             .iter()
             .filter(|router| router.name_any() != self.name_any())
         {
-            // Adding self to the set of neighbors
+            // Adding/Updating self in the map of inner neighbors
             let router_neighbors = match &router.status {
-                Some(status) => status.neighbors.clone(),
-                None => BTreeSet::new(),
+                Some(status) => status.inner_neighbors.clone(),
+                None => BTreeMap::new(),
             };
 
-            // add self.faces to the neighbors
+            // add or update self.inner_face in the neighbors map
             let mut new_neighbors = router_neighbors.clone();
-            for face in &my_faces {
-                new_neighbors.insert(face.to_string());
+            if let Some(ref face) = my_inner_face {
+                new_neighbors.insert(self.name_any(), face.clone());
             }
             debug!(
-                "Router {} neighbors: {:?}",
+                "Router {} inner_neighbors: {:?}",
                 router.name_any(),
                 new_neighbors
             );
-            let patches = vec![PatchOperation::Replace(ReplaceOperation {
-                path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
-                value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
-            })];
+            let patches = if let Some(ref face) = my_inner_face {
+                vec![PatchOperation::Add(AddOperation {
+                    path: PointerBuf::from_tokens(vec![
+                        "status",
+                        "innerNeighbors",
+                        self.name_any().as_str(),
+                    ]),
+                    value: serde_json::to_value(face).unwrap_or(serde_json::Value::Null),
+                })]
+            } else {
+                // Nothing to add if we don't have an inner face
+                Vec::new()
+            };
+            if patches.is_empty() {
+                continue;
+            }
             let patch = Patch::Json::<()>(JsonPatch(patches));
-            info!("Updating neigbors of router {}...", router.name_any());
+            info!(
+                "Updating inner neighbors of router {}...",
+                router.name_any()
+            );
             debug!("Status patch: {:?}", patch);
             let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
             let _ = api_router
@@ -278,7 +268,7 @@ impl Router {
             emit_info(
                 &ctx.recorder,
                 router,
-                "NeighborsInserted",
+                "InnerNeighborsInserted",
                 "Updated",
                 Some(format!("From `{}` Router", self.name_any())),
             )
@@ -290,7 +280,9 @@ impl Router {
                 &Event {
                     type_: EventType::Normal,
                     reason: "RouterUpdated".into(),
-                    note: Some("Propagated my faces to all routers in the network".to_string()),
+                    note: Some(
+                        "Propagated my inner face to all routers in the network".to_string(),
+                    ),
                     action: "Updated".into(),
                     secondary: None,
                 },
@@ -321,15 +313,14 @@ impl Router {
     }
 
     pub async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action> {
-        // Update status.neighbors of all other routers in the network
+        // Update status.innerNeighbors of all other routers in the network
         let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let my_network_name = self
             .labels()
             .get(NETWORK_LABEL_KEY)
             .ok_or(Error::OtherError("Network label not found".to_owned()))?;
         let lp = ListParams::default().labels(&format!("{NETWORK_LABEL_KEY}={my_network_name}"));
-        let my_status = self.status.clone().unwrap_or_default();
-        let my_faces = my_status.faces.to_btree_set();
+        let my_name = self.name_any();
         for router in api_router
             .list(&lp)
             .await
@@ -338,35 +329,44 @@ impl Router {
             .filter(|router| router.name_any() != self.name_any())
         {
             let current_neighbors = match &router.status {
-                Some(status) => status.neighbors.clone(),
-                None => BTreeSet::new(),
+                Some(status) => status.inner_neighbors.clone(),
+                None => BTreeMap::new(),
             };
-            // remove self.faces from the neighbors
+            // remove self from the neighbors map
             let mut new_neighbors = current_neighbors.clone();
-            for face in &my_faces {
-                new_neighbors.remove(&face.to_string());
-            }
+            new_neighbors.remove(&my_name);
             debug!(
-                "Router {} neighbors: {:?}",
+                "Router {} inner_neighbors: {:?}",
                 router.name_any(),
                 new_neighbors
             );
-            let patches = vec![PatchOperation::Replace(ReplaceOperation {
-                path: PointerBuf::from_tokens(vec!["status", "neighbors"]),
-                value: serde_json::to_value(new_neighbors).unwrap_or(serde_json::Value::Null),
-            })];
-            let patch = Patch::Json::<()>(JsonPatch(patches));
-            info!("Updating neigbors of router {}...", router.name_any());
-            debug!("Status patch: {:?}", patch);
-            let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-            let _ = api_router
-                .patch_status(&router.name_any(), &serverside, &patch)
-                .await
-                .map_err(Error::KubeError)?;
+            if new_neighbors.len() != current_neighbors.len() {
+                // Only send a remove when we actually removed our entry
+                if current_neighbors.contains_key(&my_name) {
+                    let patches = vec![PatchOperation::Remove(RemoveOperation {
+                        path: PointerBuf::from_tokens(vec![
+                            "status",
+                            "innerNeighbors",
+                            my_name.as_str(),
+                        ]),
+                    })];
+                    let patch = Patch::Json::<()>(JsonPatch(patches));
+                    info!(
+                        "Updating inner neighbors of router {}...",
+                        router.name_any()
+                    );
+                    debug!("Status patch: {:?}", patch);
+                    let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
+                    let _ = api_router
+                        .patch_status(&router.name_any(), &serverside, &patch)
+                        .await
+                        .map_err(Error::KubeError)?;
+                }
+            }
             emit_info(
                 &ctx.recorder,
                 router,
-                "NeighborsRemoved",
+                "InnerNeighborsRemoved",
                 "Updated",
                 Some(format!("From `{}` Router", self.name_any())),
             )
