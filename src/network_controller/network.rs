@@ -607,11 +607,7 @@ impl Network {
                     api_groups: Some(vec!["".to_string()]),
                     resources: Some(vec!["services".to_string()]),
                     verbs: vec![
-                        "get".to_string(),
-                        "list".to_string(),
-                        "watch".to_string(),
                         "create".to_string(),
-                        "update".to_string(),
                         "patch".to_string(),
                         "delete".to_string(),
                     ],
