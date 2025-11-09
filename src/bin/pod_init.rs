@@ -66,23 +66,27 @@ fn gen_config(params: GenConfigParams) -> NdndConfig {
                     port_unicast: Some(udp_unicast_port),
                     ..UdpConfig::default()
                 }),
-                tcp: tcp_port.map(|p| TcpConfig {
-                    enabled: true,
-                    port_unicast: p,
-                    ..TcpConfig::default()
-                }).or(Some(TcpConfig::default())), // When tcp config is absent, ndnd enables it on default port 6363, but we want to disable it explicitly
+                tcp: tcp_port
+                    .map(|p| TcpConfig {
+                        enabled: true,
+                        port_unicast: p,
+                        ..TcpConfig::default()
+                    })
+                    .or(Some(TcpConfig::default())), // When tcp config is absent, ndnd enables it on default port 6363, but we want to disable it explicitly
                 unix: Some(UnixConfig {
                     enabled: true,
                     socket_path: socket_path.unwrap_or("/run/nfd/nfd.sock".to_string()),
                 }),
-                websocket: ws_port.map(|p| WebSocketConfig {
-                    enabled: true,
-                    bind: "0.0.0.0".to_string(),
-                    port: p,
-                    tls_enabled: false,
-                    tls_cert: None,
-                    tls_key: None,
-                }).or(Some(WebSocketConfig::default())), // When websocket config is absent, ndnd enables it on default port 9696, but we want to disable it explicitly
+                websocket: ws_port
+                    .map(|p| WebSocketConfig {
+                        enabled: true,
+                        bind: "0.0.0.0".to_string(),
+                        port: p,
+                        tls_enabled: false,
+                        tls_cert: None,
+                        tls_key: None,
+                    })
+                    .or(Some(WebSocketConfig::default())), // When websocket config is absent, ndnd enables it on default port 9696, but we want to disable it explicitly
                 ..FacesConfig::default()
             },
             ..ForwarderConfig::default()
