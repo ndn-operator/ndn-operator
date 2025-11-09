@@ -9,7 +9,7 @@ spec:
   ndnd:
     image: ghcr.io/named-data/ndnd:1.5.2
   operator:
-    image: ghcr.io/ndn-operator/ndn-operator:sha-12f4e3b
+    image: ghcr.io/ndn-operator/ndn-operator:latest
   routerCertIssuer:
     kind: Certificate
     name: self-signed

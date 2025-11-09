@@ -93,12 +93,36 @@ pub fn create_owned_daemonset(
                                 privileged: Some(true),
                                 ..SecurityContext::default()
                             }),
-                            ports: Some(vec![ContainerPort {
-                                container_port: nw.spec.udp_unicast_port as i32,
-                                host_port: Some(nw.spec.udp_unicast_port as i32),
-                                protocol: Some("UDP".to_string()),
-                                ..ContainerPort::default()
-                            }]),
+                            ports: {
+                                let mut ports = vec![ContainerPort {
+                                    container_port: nw.spec.udp_unicast_port as i32,
+                                    host_port: Some(nw.spec.udp_unicast_port as i32),
+                                    protocol: Some("UDP".to_string()),
+                                    name: Some("udp".to_string()),
+                                    ..ContainerPort::default()
+                                }];
+                                if let Some(faces) = nw.spec.faces.as_ref() {
+                                    if let Some(tcp) = faces.tcp.as_ref() {
+                                        ports.push(ContainerPort {
+                                            container_port: tcp.port as i32,
+                                            host_port: Some(tcp.port as i32),
+                                            protocol: Some("TCP".to_string()),
+                                            name: Some("tcp".to_string()),
+                                            ..ContainerPort::default()
+                                        });
+                                    }
+                                    if let Some(ws) = faces.websocket.as_ref() {
+                                        ports.push(ContainerPort {
+                                            container_port: ws.port as i32,
+                                            host_port: Some(ws.port as i32),
+                                            protocol: Some("TCP".to_string()),
+                                            name: Some("websocket".to_string()),
+                                            ..ContainerPort::default()
+                                        });
+                                    }
+                                }
+                                Some(ports)
+                            },
                             env: Some(vec![EnvVar {
                                 name: "NDN_CLIENT_TRANSPORT".to_string(),
                                 value: Some(format!("unix://{container_socket_path}")),
