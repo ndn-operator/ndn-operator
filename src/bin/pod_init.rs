@@ -12,7 +12,7 @@ use operator::{
     dv::RouterConfig,
     fw::{FacesConfig, ForwarderConfig, TcpConfig, UdpConfig, UnixConfig, WebSocketConfig},
     helper::{Decoded, decode_secret},
-    network_controller::{IpFamily, Network, Router, is_router_created},
+    network_controller::{IpFamily, Router, TrustAnchorRef, is_router_created},
     telemetry,
 };
 use serde_json::json;
@@ -66,23 +66,27 @@ fn gen_config(params: GenConfigParams) -> NdndConfig {
                     port_unicast: Some(udp_unicast_port),
                     ..UdpConfig::default()
                 }),
-                tcp: tcp_port.map(|p| TcpConfig {
-                    enabled: true,
-                    port_unicast: p,
-                    ..TcpConfig::default()
-                }),
+                tcp: tcp_port
+                    .map(|p| TcpConfig {
+                        enabled: true,
+                        port_unicast: p,
+                        ..TcpConfig::default()
+                    })
+                    .or(Some(TcpConfig::default())), // When tcp config is absent, ndnd enables it on default port 6363, but we want to disable it explicitly
                 unix: Some(UnixConfig {
                     enabled: true,
                     socket_path: socket_path.unwrap_or("/run/nfd/nfd.sock".to_string()),
                 }),
-                websocket: ws_port.map(|p| WebSocketConfig {
-                    enabled: true,
-                    bind: "0.0.0.0".to_string(),
-                    port: p,
-                    tls_enabled: false,
-                    tls_cert: None,
-                    tls_key: None,
-                }),
+                websocket: ws_port
+                    .map(|p| WebSocketConfig {
+                        enabled: true,
+                        bind: "0.0.0.0".to_string(),
+                        port: p,
+                        tls_enabled: false,
+                        tls_cert: None,
+                        tls_key: None,
+                    })
+                    .or(Some(WebSocketConfig::default())), // When websocket config is absent, ndnd enables it on default port 9696, but we want to disable it explicitly
                 ..FacesConfig::default()
             },
             ..ForwarderConfig::default()
@@ -120,17 +124,21 @@ async fn main() -> anyhow::Result<()> {
     let client = Client::try_default().await?;
     let api_rt = Api::<Router>::namespaced(client.clone(), &network_namespace);
     let api_cert = Api::<Certificate>::namespaced(client.clone(), &network_namespace);
-    let api_nw = Api::<Network>::namespaced(client.clone(), &network_namespace);
     let api_secret = Api::<Secret>::namespaced(client.clone(), &network_namespace);
 
-    let my_network = api_nw.get(&network_name).await.map_err(Error::KubeError)?;
-    // TODO: refactor
-    let trust_anchors = if let Some(anchors) = my_network.spec.trust_anchors.clone() {
+    let trust_anchor_refs: Option<Vec<TrustAnchorRef>> = env::var("NDN_TRUST_ANCHORS")
+        .ok()
+        .map(|raw| {
+            serde_json::from_str(&raw)
+                .map_err(|e| Error::OtherError(format!("Failed to parse NDN_TRUST_ANCHORS: {e}")))
+        })
+        .transpose()?;
+    let trust_anchors = if let Some(anchors) = trust_anchor_refs {
         Some(
             try_join_all(anchors.into_iter().map(async |ta| {
                 let client = client.clone();
-                let network_namespace = network_namespace.clone();
-                ta.get_cert_name(&client, &network_namespace).await
+                let ns = network_namespace.clone();
+                ta.get_cert_name(&client, &ns).await
             }))
             .await?,
         )
@@ -138,17 +146,16 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
-    // Determine tcp/websocket ports from Network faces
-    let tcp_port: Option<u16> = my_network
-        .spec
-        .faces
-        .as_ref()
-        .and_then(|f| f.tcp.as_ref().map(|t| t.port));
-    let ws_port: Option<u16> = my_network
-        .spec
-        .faces
-        .as_ref()
-        .and_then(|f| f.websocket.as_ref().map(|w| w.port));
+    let tcp_port = env::var("NDN_TCP_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok());
+    let ws_port = env::var("NDN_WS_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok());
+    let preferred_ip_family = match env::var("NDN_IP_FAMILY").ok().as_deref() {
+        Some("IPv6") => IpFamily::IPv6,
+        _ => IpFamily::IPv4,
+    };
 
     // Generate Ndnd config
     let config = gen_config(GenConfigParams {
@@ -256,10 +263,10 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Patch the status of the existing router
-    // Decide which UDP face to publish based on Network ipFamily.
+    // Decide which UDP face to publish based on ip family preference.
     // We only publish ONE UDP face per router to prevent duplicate inter-router links.
     // Preference is driven by Network.spec.ipFamily with a graceful fallback to the other family if the preferred IP is absent on the node.
-    let (udp4_face, udp6_face) = match my_network.spec.ip_family.unwrap_or(IpFamily::IPv4) {
+    let (udp4_face, udp6_face) = match preferred_ip_family {
         IpFamily::IPv4 => {
             // Prefer IPv4; if not available, fallback to IPv6
             if let Some(ip) = ip4.clone() {
