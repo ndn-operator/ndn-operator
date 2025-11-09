@@ -1,11 +1,11 @@
-use operator::network_controller::{NdndSpec, NetworkSpec};
+use operator::network_controller::{IpFamily, NdndSpec, NetworkSpec};
 
 #[test]
 fn default_ndnd_image() {
     let spec = NetworkSpec {
         prefix: "/test".into(),
         udp_unicast_port: 6363,
-        ip_family: None,
+        ip_family: IpFamily::IPv4,
         node_selector: None,
         ndnd: NdndSpec::default(),
         operator: None,
