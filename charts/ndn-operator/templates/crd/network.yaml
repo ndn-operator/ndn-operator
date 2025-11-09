@@ -52,6 +52,7 @@ spec:
                             type: LoadBalancer
                         properties:
                           metadata:
+                            default: {}
                             description: Standard object metadata for the service
                             properties:
                               annotations:
@@ -184,6 +185,8 @@ spec:
                                 type: string
                             type: object
                           spec:
+                            default:
+                              type: LoadBalancer
                             description: Specification for the service template
                             properties:
                               type:
@@ -191,9 +194,6 @@ spec:
                                 description: 'Service type to expose this face (default: LoadBalancer)'
                                 type: string
                             type: object
-                        required:
-                        - metadata
-                        - spec
                         type: object
                     required:
                     - port
@@ -213,6 +213,7 @@ spec:
                             type: LoadBalancer
                         properties:
                           metadata:
+                            default: {}
                             description: Standard object metadata for the service
                             properties:
                               annotations:
@@ -345,6 +346,8 @@ spec:
                                 type: string
                             type: object
                           spec:
+                            default:
+                              type: LoadBalancer
                             description: Specification for the service template
                             properties:
                               type:
@@ -352,9 +355,6 @@ spec:
                                 description: 'Service type to expose this face (default: LoadBalancer)'
                                 type: string
                             type: object
-                        required:
-                        - metadata
-                        - spec
                         type: object
                     required:
                     - port
@@ -363,13 +363,12 @@ spec:
               ipFamily:
                 default: IPv4
                 description: |-
-                  Preferred IP family for inter-router UDP faces. If unset, defaults to IPv4.
+                  Preferred IP family for inter-router UDP faces. Defaults to IPv4.
                   When set to IPv4, only an IPv4 UDP face will be published per router (with IPv6 as a fallback if IPv4 is not available on the node).
                   When set to IPv6, only an IPv6 UDP face will be published per router (with IPv4 as a fallback if IPv6 is not available on the node).
                 enum:
                 - IPv4
                 - IPv6
-                nullable: false
                 type: string
               ndnd:
                 default:
