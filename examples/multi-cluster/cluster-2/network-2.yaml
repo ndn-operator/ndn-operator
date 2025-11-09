@@ -11,11 +11,13 @@ spec:
   operator:
     image: ghcr.io/ndn-operator/ndn-operator:latest
   routerCertIssuer:
-    kind: Certificate
-    name: self-signed
+    kind: ExternalCertificate
+    name: test2-cert
   trustAnchors:
-  - name: self-signed
-    kind: Certificate
+  - name: test1-cert
+    kind: ExternalCertificate
+  - name: test2-cert
+    kind: ExternalCertificate
   faces:
     websocket:
       port: 9696
