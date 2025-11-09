@@ -310,14 +310,14 @@ fn network_init_env(nw: &Network, container_socket_path: &str) -> Vec<EnvVar> {
         }
     }
 
-    if let Some(trust_anchors) = nw.spec.trust_anchors.as_ref() {
-        if let Ok(serialized) = serde_json::to_string(trust_anchors) {
-            envs.push(EnvVar {
-                name: "NDN_TRUST_ANCHORS".into(),
-                value: Some(serialized),
-                ..EnvVar::default()
-            });
-        }
+    if let Some(trust_anchors) = nw.spec.trust_anchors.as_ref()
+        && let Ok(serialized) = serde_json::to_string(trust_anchors)
+    {
+        envs.push(EnvVar {
+            name: "NDN_TRUST_ANCHORS".into(),
+            value: Some(serialized),
+            ..EnvVar::default()
+        });
     }
 
     envs
