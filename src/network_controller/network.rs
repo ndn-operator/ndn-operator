@@ -171,6 +171,16 @@ impl TrustAnchorRef {
 #[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct FaceServiceTemplate {
+    /// Standard object metadata for the service
+    pub metadata: ObjectMeta,
+    /// Specification for the service template
+    pub spec: FaceServiceTemplateSpec,
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct FaceServiceTemplateSpec {
     /// Service type to expose this face (default: LoadBalancer)
     #[serde(default = "default_service_type")]
@@ -187,15 +197,18 @@ fn default_service_type() -> String {
 pub struct NetworkTcpFaceSpec {
     pub port: u16,
     #[serde(default)]
-    pub service_template: FaceServiceTemplateSpec,
+    pub service_template: FaceServiceTemplate,
 }
 
 impl Default for NetworkTcpFaceSpec {
     fn default() -> Self {
         Self {
             port: 6363,
-            service_template: FaceServiceTemplateSpec {
-                type_: default_service_type(),
+            service_template: FaceServiceTemplate {
+                metadata: ObjectMeta::default(),
+                spec: FaceServiceTemplateSpec {
+                    type_: default_service_type(),
+                },
             },
         }
     }
@@ -207,15 +220,18 @@ impl Default for NetworkTcpFaceSpec {
 pub struct NetworkWebSocketFaceSpec {
     pub port: u16,
     #[serde(default)]
-    pub service_template: FaceServiceTemplateSpec,
+    pub service_template: FaceServiceTemplate,
 }
 
 impl Default for NetworkWebSocketFaceSpec {
     fn default() -> Self {
         Self {
             port: 9696,
-            service_template: FaceServiceTemplateSpec {
-                type_: default_service_type(),
+            service_template: FaceServiceTemplate {
+                metadata: ObjectMeta::default(),
+                spec: FaceServiceTemplateSpec {
+                    type_: default_service_type(),
+                },
             },
         }
     }
@@ -369,18 +385,23 @@ impl Network {
             if let Some(tcp) = &faces.tcp {
                 let svc_name = format!("{}-tcp", self.name_any());
                 let oref = self.controller_owner_ref(&()).unwrap();
-                let labels = BTreeMap::from([(DS_LABEL_KEY.to_string(), self.name_any())]);
+                let mut labels = BTreeMap::from([(DS_LABEL_KEY.to_string(), self.name_any())]);
+                let selector_labels = labels.clone();
+                if let Some(extra_labels) = tcp.service_template.metadata.labels.clone() {
+                    labels.extend(extra_labels);
+                }
                 let svc = Service {
                     metadata: ObjectMeta {
                         name: Some(svc_name.clone()),
                         namespace: self.namespace(),
                         owner_references: Some(vec![oref.clone()]),
-                        labels: Some(labels.clone()),
+                        labels: Some(labels),
+                        annotations: tcp.service_template.metadata.annotations.clone(),
                         ..ObjectMeta::default()
                     },
                     spec: Some(k8s_openapi::api::core::v1::ServiceSpec {
-                        type_: Some(tcp.service_template.type_.clone()),
-                        selector: Some(labels.clone()),
+                        type_: Some(tcp.service_template.spec.type_.clone()),
+                        selector: Some(selector_labels),
                         ports: Some(vec![k8s_openapi::api::core::v1::ServicePort {
                             name: Some("tcp".to_string()),
                             protocol: Some("TCP".to_string()),
@@ -405,18 +426,22 @@ impl Network {
             if let Some(ws) = &faces.websocket {
                 let svc_name = format!("{}-ws", self.name_any());
                 let oref = self.controller_owner_ref(&()).unwrap();
-                let labels = BTreeMap::from([(DS_LABEL_KEY.to_string(), self.name_any())]);
+                let mut labels = BTreeMap::from([(DS_LABEL_KEY.to_string(), self.name_any())]);
+                let selector_labels = labels.clone();
+                if let Some(extra_labels) = ws.service_template.metadata.labels.clone() {
+                    labels.extend(extra_labels);
+                }
                 let svc = Service {
                     metadata: ObjectMeta {
                         name: Some(svc_name.clone()),
                         namespace: self.namespace(),
                         owner_references: Some(vec![oref.clone()]),
-                        labels: Some(labels.clone()),
+                        labels: Some(labels),
                         ..ObjectMeta::default()
                     },
                     spec: Some(k8s_openapi::api::core::v1::ServiceSpec {
-                        type_: Some(ws.service_template.type_.clone()),
-                        selector: Some(labels.clone()),
+                        type_: Some(ws.service_template.spec.type_.clone()),
+                        selector: Some(selector_labels),
                         ports: Some(vec![k8s_openapi::api::core::v1::ServicePort {
                             name: Some("websocket".to_string()),
                             protocol: Some("TCP".to_string()),
