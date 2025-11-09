@@ -212,7 +212,7 @@ pub fn create_owned_daemonset(
 }
 
 fn network_init_env(nw: &Network, container_socket_path: &str) -> Vec<EnvVar> {
-    vec![
+    let mut envs = vec![
         EnvVar {
             name: "NDN_NETWORK_NAME".into(),
             value: Some(nw.name_any()),
@@ -279,5 +279,46 @@ fn network_init_env(nw: &Network, container_socket_path: &str) -> Vec<EnvVar> {
             }),
             ..EnvVar::default()
         },
-    ]
+    ];
+
+    if let Some(ip_family) = nw.spec.ip_family.as_ref() {
+        let family = match ip_family {
+            crate::network_controller::IpFamily::IPv4 => "IPv4",
+            crate::network_controller::IpFamily::IPv6 => "IPv6",
+        };
+        envs.push(EnvVar {
+            name: "NDN_IP_FAMILY".into(),
+            value: Some(family.to_string()),
+            ..EnvVar::default()
+        });
+    }
+
+    if let Some(faces) = nw.spec.faces.as_ref() {
+        if let Some(tcp) = faces.tcp.as_ref() {
+            envs.push(EnvVar {
+                name: "NDN_TCP_PORT".into(),
+                value: Some(tcp.port.to_string()),
+                ..EnvVar::default()
+            });
+        }
+        if let Some(ws) = faces.websocket.as_ref() {
+            envs.push(EnvVar {
+                name: "NDN_WS_PORT".into(),
+                value: Some(ws.port.to_string()),
+                ..EnvVar::default()
+            });
+        }
+    }
+
+    if let Some(trust_anchors) = nw.spec.trust_anchors.as_ref() {
+        if let Ok(serialized) = serde_json::to_string(trust_anchors) {
+            envs.push(EnvVar {
+                name: "NDN_TRUST_ANCHORS".into(),
+                value: Some(serialized),
+                ..EnvVar::default()
+            });
+        }
+    }
+
+    envs
 }

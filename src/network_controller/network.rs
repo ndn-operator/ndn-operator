@@ -555,28 +555,14 @@ impl Network {
             rules: Some(vec![
                 PolicyRule {
                     api_groups: Some(vec!["named-data.net".to_string()]),
-                    resources: Some(vec!["networks".to_string()]),
-                    verbs: vec!["get".to_string()],
-                    ..PolicyRule::default()
-                },
-                PolicyRule {
-                    api_groups: Some(vec!["named-data.net".to_string()]),
                     resources: Some(vec!["routers/status".to_string()]),
-                    verbs: vec!["update".to_string(), "patch".to_string()],
+                    verbs: vec!["get".to_string(), "patch".to_string()],
                     ..PolicyRule::default()
                 },
                 PolicyRule {
                     api_groups: Some(vec!["named-data.net".to_string()]),
                     resources: Some(vec!["routers".to_string()]),
-                    verbs: vec![
-                        "get".to_string(),
-                        "list".to_string(),
-                        "watch".to_string(),
-                        "create".to_string(),
-                        "delete".to_string(),
-                        "patch".to_string(),
-                        "update".to_string(),
-                    ],
+                    verbs: vec!["get".to_string(), "list".to_string(), "watch".to_string()],
                     ..PolicyRule::default()
                 },
                 PolicyRule {
@@ -601,16 +587,6 @@ impl Network {
                     api_groups: Some(vec!["".to_string()]),
                     resources: Some(vec!["secrets".to_string()]),
                     verbs: vec!["get".to_string()],
-                    ..PolicyRule::default()
-                },
-                PolicyRule {
-                    api_groups: Some(vec!["".to_string()]),
-                    resources: Some(vec!["services".to_string()]),
-                    verbs: vec![
-                        "create".to_string(),
-                        "patch".to_string(),
-                        "delete".to_string(),
-                    ],
                     ..PolicyRule::default()
                 },
             ]),

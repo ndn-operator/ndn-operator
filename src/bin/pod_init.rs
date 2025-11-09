@@ -12,7 +12,7 @@ use operator::{
     dv::RouterConfig,
     fw::{FacesConfig, ForwarderConfig, TcpConfig, UdpConfig, UnixConfig, WebSocketConfig},
     helper::{Decoded, decode_secret},
-    network_controller::{IpFamily, Network, Router, is_router_created},
+    network_controller::{IpFamily, Router, TrustAnchorRef, is_router_created},
     telemetry,
 };
 use serde_json::json;
@@ -124,17 +124,21 @@ async fn main() -> anyhow::Result<()> {
     let client = Client::try_default().await?;
     let api_rt = Api::<Router>::namespaced(client.clone(), &network_namespace);
     let api_cert = Api::<Certificate>::namespaced(client.clone(), &network_namespace);
-    let api_nw = Api::<Network>::namespaced(client.clone(), &network_namespace);
     let api_secret = Api::<Secret>::namespaced(client.clone(), &network_namespace);
 
-    let my_network = api_nw.get(&network_name).await.map_err(Error::KubeError)?;
-    // TODO: refactor
-    let trust_anchors = if let Some(anchors) = my_network.spec.trust_anchors.clone() {
+    let trust_anchor_refs: Option<Vec<TrustAnchorRef>> = env::var("NDN_TRUST_ANCHORS")
+        .ok()
+        .map(|raw| {
+            serde_json::from_str(&raw)
+                .map_err(|e| Error::OtherError(format!("Failed to parse NDN_TRUST_ANCHORS: {e}")))
+        })
+        .transpose()?;
+    let trust_anchors = if let Some(anchors) = trust_anchor_refs {
         Some(
             try_join_all(anchors.into_iter().map(async |ta| {
                 let client = client.clone();
-                let network_namespace = network_namespace.clone();
-                ta.get_cert_name(&client, &network_namespace).await
+                let ns = network_namespace.clone();
+                ta.get_cert_name(&client, &ns).await
             }))
             .await?,
         )
@@ -142,17 +146,16 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
-    // Determine tcp/websocket ports from Network faces
-    let tcp_port: Option<u16> = my_network
-        .spec
-        .faces
-        .as_ref()
-        .and_then(|f| f.tcp.as_ref().map(|t| t.port));
-    let ws_port: Option<u16> = my_network
-        .spec
-        .faces
-        .as_ref()
-        .and_then(|f| f.websocket.as_ref().map(|w| w.port));
+    let tcp_port = env::var("NDN_TCP_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok());
+    let ws_port = env::var("NDN_WS_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok());
+    let preferred_ip_family = match env::var("NDN_IP_FAMILY").ok().as_deref() {
+        Some("IPv6") => IpFamily::IPv6,
+        _ => IpFamily::IPv4,
+    };
 
     // Generate Ndnd config
     let config = gen_config(GenConfigParams {
@@ -260,10 +263,10 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Patch the status of the existing router
-    // Decide which UDP face to publish based on Network ipFamily.
+    // Decide which UDP face to publish based on ip family preference.
     // We only publish ONE UDP face per router to prevent duplicate inter-router links.
     // Preference is driven by Network.spec.ipFamily with a graceful fallback to the other family if the preferred IP is absent on the node.
-    let (udp4_face, udp6_face) = match my_network.spec.ip_family.unwrap_or(IpFamily::IPv4) {
+    let (udp4_face, udp6_face) = match preferred_ip_family {
         IpFamily::IPv4 => {
             // Prefer IPv4; if not available, fallback to IPv6
             if let Some(ip) = ip4.clone() {
