@@ -246,8 +246,10 @@ pub struct FacesSpec {
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub enum IpFamily {
     #[serde(rename = "IPv4")]
+    #[default]
     IPv4,
     #[serde(rename = "IPv6")]
     IPv6,
@@ -255,12 +257,6 @@ pub enum IpFamily {
 
 fn default_ip_family() -> IpFamily {
     IpFamily::IPv4
-}
-
-impl Default for IpFamily {
-    fn default() -> Self {
-        IpFamily::IPv4
-    }
 }
 
 fn default_face_service_template() -> FaceServiceTemplate {
