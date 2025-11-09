@@ -1,0 +1,8 @@
+apiVersion: named-data.net/v1alpha1
+kind: NeighborLink
+metadata:
+  name: to-test2
+  namespace: mynetwork
+spec:
+  network: test1
+  uri: ws://<address>:9696
