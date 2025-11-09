@@ -305,17 +305,15 @@ fn network_init_env(nw: &Network, container_socket_path: &str) -> Vec<EnvVar> {
         },
     ];
 
-    if let Some(ip_family) = nw.spec.ip_family.as_ref() {
-        let family = match ip_family {
-            crate::network_controller::IpFamily::IPv4 => "IPv4",
-            crate::network_controller::IpFamily::IPv6 => "IPv6",
-        };
-        envs.push(EnvVar {
-            name: "NDN_IP_FAMILY".into(),
-            value: Some(family.to_string()),
-            ..EnvVar::default()
-        });
-    }
+    let family = match nw.spec.ip_family {
+        crate::network_controller::IpFamily::IPv4 => "IPv4",
+        crate::network_controller::IpFamily::IPv6 => "IPv6",
+    };
+    envs.push(EnvVar {
+        name: "NDN_IP_FAMILY".into(),
+        value: Some(family.to_string()),
+        ..EnvVar::default()
+    });
 
     if let Some(faces) = nw.spec.faces.as_ref() {
         if let Some(tcp) = faces.tcp.as_ref() {

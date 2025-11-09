@@ -1,13 +1,13 @@
 use k8s_openapi::api::apps::v1::DaemonSet;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use operator::network_controller::daemonset::create_owned_daemonset;
-use operator::network_controller::{NdndSpec, Network, NetworkSpec, OperatorSpec};
+use operator::network_controller::{IpFamily, NdndSpec, Network, NetworkSpec, OperatorSpec};
 
 fn test_network_spec() -> NetworkSpec {
     NetworkSpec {
         prefix: "/test".into(),
         udp_unicast_port: 6363,
-        ip_family: None,
+        ip_family: IpFamily::IPv4,
         node_selector: None,
         ndnd: NdndSpec::default(),
         operator: Some(OperatorSpec {

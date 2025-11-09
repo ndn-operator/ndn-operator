@@ -73,10 +73,12 @@ pub struct NetworkSpec {
     /// The UDP unicast port for the nodes.
     /// Must be unique across all networks in the cluster.
     pub udp_unicast_port: u16,
-    /// Preferred IP family for inter-router UDP faces. If unset, defaults to IPv4.
+    /// Preferred IP family for inter-router UDP faces. Defaults to IPv4.
     /// When set to IPv4, only an IPv4 UDP face will be published per router (with IPv6 as a fallback if IPv4 is not available on the node).
     /// When set to IPv6, only an IPv6 UDP face will be published per router (with IPv4 as a fallback if IPv6 is not available on the node).
-    pub ip_family: Option<IpFamily>,
+    #[serde(default = "default_ip_family")]
+    #[schemars(default = "default_ip_family")]
+    pub ip_family: IpFamily,
     /// The node selector for the network, used to schedule the network controller on specific nodes
     pub node_selector: Option<BTreeMap<String, String>>,
     /// The NDND image to use for the network controller
@@ -173,17 +175,22 @@ impl TrustAnchorRef {
 #[serde(rename_all = "camelCase")]
 pub struct FaceServiceTemplate {
     /// Standard object metadata for the service
+    #[serde(default)]
+    #[schemars(default)]
     pub metadata: ObjectMeta,
     /// Specification for the service template
+    #[serde(default)]
+    #[schemars(default)]
     pub spec: FaceServiceTemplateSpec,
 }
 
 #[skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, Default)]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct FaceServiceTemplateSpec {
     /// Service type to expose this face (default: LoadBalancer)
     #[serde(default = "default_service_type")]
+    #[schemars(default = "default_service_type")]
     pub type_: String,
 }
 
@@ -196,7 +203,8 @@ fn default_service_type() -> String {
 #[serde(rename_all = "camelCase")]
 pub struct NetworkTcpFaceSpec {
     pub port: u16,
-    #[serde(default)]
+    #[serde(default = "default_face_service_template")]
+    #[schemars(default = "default_face_service_template")]
     pub service_template: FaceServiceTemplate,
 }
 
@@ -204,12 +212,7 @@ impl Default for NetworkTcpFaceSpec {
     fn default() -> Self {
         Self {
             port: 6363,
-            service_template: FaceServiceTemplate {
-                metadata: ObjectMeta::default(),
-                spec: FaceServiceTemplateSpec {
-                    type_: default_service_type(),
-                },
-            },
+            service_template: default_face_service_template(),
         }
     }
 }
@@ -219,7 +222,8 @@ impl Default for NetworkTcpFaceSpec {
 #[serde(rename_all = "camelCase")]
 pub struct NetworkWebSocketFaceSpec {
     pub port: u16,
-    #[serde(default)]
+    #[serde(default = "default_face_service_template")]
+    #[schemars(default = "default_face_service_template")]
     pub service_template: FaceServiceTemplate,
 }
 
@@ -227,12 +231,7 @@ impl Default for NetworkWebSocketFaceSpec {
     fn default() -> Self {
         Self {
             port: 9696,
-            service_template: FaceServiceTemplate {
-                metadata: ObjectMeta::default(),
-                spec: FaceServiceTemplateSpec {
-                    type_: default_service_type(),
-                },
-            },
+            service_template: default_face_service_template(),
         }
     }
 }
@@ -247,11 +246,29 @@ pub struct FacesSpec {
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub enum IpFamily {
     #[serde(rename = "IPv4")]
+    #[default]
     IPv4,
     #[serde(rename = "IPv6")]
     IPv6,
+}
+
+fn default_ip_family() -> IpFamily {
+    IpFamily::IPv4
+}
+
+fn default_face_service_template() -> FaceServiceTemplate {
+    FaceServiceTemplate::default()
+}
+
+impl Default for FaceServiceTemplateSpec {
+    fn default() -> Self {
+        Self {
+            type_: default_service_type(),
+        }
+    }
 }
 
 #[skip_serializing_none]
