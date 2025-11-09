@@ -7,7 +7,7 @@ spec:
   prefix: /test
   udpUnicastPort: 6363
   ndnd:
-    image: ghcr.io/named-data/ndnd:latest
+    image: ghcr.io/named-data/ndnd:1.5.2
   operator:
     image: ghcr.io/ndn-operator/ndn-operator:latest
   routerCertIssuer:

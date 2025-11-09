@@ -70,7 +70,7 @@ fn gen_config(params: GenConfigParams) -> NdndConfig {
                     enabled: true,
                     port_unicast: p,
                     ..TcpConfig::default()
-                }),
+                }).or(Some(TcpConfig::default())), // When tcp config is absent, ndnd enables it on default port 6363, but we want to disable it explicitly
                 unix: Some(UnixConfig {
                     enabled: true,
                     socket_path: socket_path.unwrap_or("/run/nfd/nfd.sock".to_string()),
@@ -82,7 +82,7 @@ fn gen_config(params: GenConfigParams) -> NdndConfig {
                     tls_enabled: false,
                     tls_cert: None,
                     tls_key: None,
-                }),
+                }).or(Some(WebSocketConfig::default())), // When websocket config is absent, ndnd enables it on default port 9696, but we want to disable it explicitly
                 ..FacesConfig::default()
             },
             ..ForwarderConfig::default()
