@@ -2,13 +2,16 @@ use clap::Parser;
 use futures::future::try_join_all;
 use k8s_openapi::api::core::v1::Secret;
 use kube::{
-    Client,
+    Client, Resource,
     api::{Api, Patch, PatchParams},
     runtime::wait::await_condition,
 };
 use operator::{
     Error, NdndConfig,
-    cert_controller::{Certificate, is_cert_valid},
+    cert_controller::{
+        Certificate, CertificateStatus, ExternalCertificate, ExternalCertificateStatus,
+        is_cert_valid, is_external_cert_valid,
+    },
     dv::RouterConfig,
     fw::{FacesConfig, ForwarderConfig, TcpConfig, UdpConfig, UnixConfig, WebSocketConfig},
     helper::{Decoded, decode_secret},
@@ -16,7 +19,7 @@ use operator::{
     telemetry,
 };
 use serde_json::json;
-use std::env;
+use std::{collections::BTreeMap, env, time::Duration};
 use tracing::*;
 
 /// Generate config file for ndnd
@@ -38,6 +41,14 @@ struct GenConfigParams {
     trust_anchors: Option<Vec<String>>,
     tcp_port: Option<u16>,
     ws_port: Option<u16>,
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedTrustAnchor {
+    resource_name: String,
+    namespace: String,
+    cert_name: String,
+    cert_secret_name: String,
 }
 
 fn gen_config(params: GenConfigParams) -> NdndConfig {
@@ -94,6 +105,139 @@ fn gen_config(params: GenConfigParams) -> NdndConfig {
     }
 }
 
+async fn load_secret_data(
+    api_secret: &Api<Secret>,
+    secret_name: &str,
+) -> Result<BTreeMap<String, Decoded>, Error> {
+    let secret = api_secret
+        .get(secret_name)
+        .await
+        .map_err(Error::KubeError)?;
+    Ok(decode_secret(&secret))
+}
+
+fn secret_value_utf8(
+    data: &BTreeMap<String, Decoded>,
+    secret_name: &str,
+    key: &str,
+) -> Result<String, Error> {
+    match data.get(key) {
+        Some(Decoded::Utf8(text)) => Ok(text.clone()),
+        Some(Decoded::Bytes(_)) => Err(Error::OtherError(format!(
+            "{key} in secret {secret_name} is not a valid UTF-8 string"
+        ))),
+        None => Err(Error::OtherError(format!(
+            "{key} not found in secret {secret_name}"
+        ))),
+    }
+}
+
+trait CertSecret {
+    fn cert_fields(&self) -> (Option<String>, Option<String>);
+}
+
+impl CertSecret for CertificateStatus {
+    fn cert_fields(&self) -> (Option<String>, Option<String>) {
+        (self.cert.name.clone(), self.cert.secret.clone())
+    }
+}
+
+impl CertSecret for ExternalCertificateStatus {
+    fn cert_fields(&self) -> (Option<String>, Option<String>) {
+        (self.cert.name.clone(), self.cert.secret.clone())
+    }
+}
+
+async fn resolve_cert_from_api<T, F, C, S>(
+    api: Api<T>,
+    name: &str,
+    wait_condition: F,
+    kind_label: &str,
+) -> Result<(String, String), Error>
+where
+    T: Resource<DynamicType = ()>
+        + Clone
+        + serde::de::DeserializeOwned
+        + std::fmt::Debug
+        + Send
+        + Sync
+        + 'static,
+    F: Fn() -> C,
+    C: kube::runtime::wait::Condition<T>,
+    T: kube::core::object::HasStatus<Status = S>,
+    S: CertSecret,
+{
+    tokio::time::timeout(
+        Duration::from_secs(3),
+        await_condition(api.clone(), name, wait_condition()),
+    )
+    .await
+    .map_err(|e| {
+        Error::OtherError(format!(
+            "Timeout while waiting for {kind_label} `{name}` to be valid: {e}"
+        ))
+    })?
+    .map_err(|e| {
+        Error::OtherError(format!(
+            "Failed while waiting for {kind_label} `{name}` to become ready: {e}"
+        ))
+    })?;
+
+    let resource = api.get_status(name).await.map_err(Error::KubeError)?;
+    let status = resource
+        .status()
+        .ok_or_else(|| Error::OtherError(format!("Status not found for {kind_label} `{name}`")))?;
+    let (cert_name_opt, cert_secret_opt) = status.cert_fields();
+
+    let cert_name = cert_name_opt.ok_or_else(|| {
+        Error::OtherError(format!("Certificate name not found in status for `{name}`"))
+    })?;
+    let cert_secret_name = cert_secret_opt.ok_or_else(|| {
+        Error::OtherError(format!(
+            "Certificate secret not found in status for `{name}`"
+        ))
+    })?;
+
+    Ok((cert_name, cert_secret_name))
+}
+
+async fn resolve_trust_anchor(
+    trust_anchor: TrustAnchorRef,
+    client: Client,
+    default_namespace: String,
+) -> Result<ResolvedTrustAnchor, Error> {
+    let TrustAnchorRef {
+        name,
+        kind,
+        namespace,
+    } = trust_anchor;
+    let namespace = namespace.unwrap_or(default_namespace);
+
+    let (cert_name, cert_secret_name) = match kind.as_str() {
+        "Certificate" => {
+            let api = Api::<Certificate>::namespaced(client.clone(), &namespace);
+            resolve_cert_from_api(api, &name, is_cert_valid, "Certificate").await?
+        }
+        "ExternalCertificate" => {
+            let api = Api::<ExternalCertificate>::namespaced(client.clone(), &namespace);
+            resolve_cert_from_api(api, &name, is_external_cert_valid, "ExternalCertificate").await?
+        }
+        _ => {
+            return Err(Error::OtherError(format!(
+                "Unsupported trust anchor kind: {}",
+                kind
+            )));
+        }
+    };
+
+    Ok(ResolvedTrustAnchor {
+        resource_name: name,
+        namespace,
+        cert_name,
+        cert_secret_name,
+    })
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     telemetry::init().await;
@@ -133,12 +277,12 @@ async fn main() -> anyhow::Result<()> {
                 .map_err(|e| Error::OtherError(format!("Failed to parse NDN_TRUST_ANCHORS: {e}")))
         })
         .transpose()?;
-    let trust_anchors = if let Some(anchors) = trust_anchor_refs {
+    let resolved_trust_anchors = if let Some(anchors) = trust_anchor_refs {
         Some(
-            try_join_all(anchors.into_iter().map(async |ta| {
+            try_join_all(anchors.into_iter().map(|ta| {
                 let client = client.clone();
                 let ns = network_namespace.clone();
-                ta.get_cert_name(&client, &ns).await
+                async move { resolve_trust_anchor(ta, client, ns).await }
             }))
             .await?,
         )
@@ -164,7 +308,9 @@ async fn main() -> anyhow::Result<()> {
         udp_unicast_port,
         keychain,
         socket_path,
-        trust_anchors,
+        trust_anchors: resolved_trust_anchors
+            .as_ref()
+            .map(|anchors| anchors.iter().map(|a| a.cert_name.clone()).collect()),
         tcp_port,
         ws_port,
     });
@@ -180,7 +326,7 @@ async fn main() -> anyhow::Result<()> {
     if !insecure {
         info!("Waiting for the router certificate to be valid...");
         let cert_valid = await_condition(api_cert.clone(), &certificate_name, is_cert_valid());
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(3), cert_valid).await?;
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(12), cert_valid).await?;
         // Copy cert and keys from the secrets to the keychain directory
         let cert = api_cert
             .get_status(&certificate_name)
@@ -197,58 +343,17 @@ async fn main() -> anyhow::Result<()> {
                 .ok_or(Error::OtherError(
                     "Certificate secret not found".to_string(),
                 ))?;
-        let key_secret = decode_secret(
-            &api_secret
-                .get(&key_secret_name)
-                .await
-                .map_err(Error::KubeError)?,
-        );
-        let cert_secret = decode_secret(
-            &api_secret
-                .get(&cert_secret_name)
-                .await
-                .map_err(Error::KubeError)?,
-        );
-        let key_data = key_secret
-            .get(Certificate::SECRET_KEY)
-            .ok_or(Error::OtherError("Key not found in secret".to_string()))?;
-        let cert_data = cert_secret
-            .get(Certificate::CERT_KEY)
-            .ok_or(Error::OtherError(
-                "Certificate not found in secret".to_string(),
-            ))?;
-        let signer_data =
-            cert_secret
-                .get(Certificate::SIGNER_CERT_KEY)
-                .ok_or(Error::OtherError(
-                    "Signer certificate not found in secret".to_string(),
-                ))?;
-        let signer_cert_text = match signer_data {
-            Decoded::Utf8(text) => text,
-            Decoded::Bytes(_) => {
-                return Err(Error::OtherError(
-                    "Signer certificate is not a valid UTF-8 string".to_string(),
-                )
-                .into());
-            }
-        };
-        let key_text = match key_data {
-            Decoded::Utf8(text) => text,
-            Decoded::Bytes(_) => {
-                return Err(
-                    Error::OtherError("Key is not a valid UTF-8 string".to_string()).into(),
-                );
-            }
-        };
-        let cert_text = match cert_data {
-            Decoded::Utf8(text) => text,
-            Decoded::Bytes(_) => {
-                return Err(Error::OtherError(
-                    "Certificate is not a valid UTF-8 string".to_string(),
-                )
-                .into());
-            }
-        };
+        let key_secret_data = load_secret_data(&api_secret, &key_secret_name).await?;
+        let cert_secret_data = load_secret_data(&api_secret, &cert_secret_name).await?;
+        let key_text =
+            secret_value_utf8(&key_secret_data, &key_secret_name, Certificate::SECRET_KEY)?;
+        let cert_text =
+            secret_value_utf8(&cert_secret_data, &cert_secret_name, Certificate::CERT_KEY)?;
+        let signer_cert_text = secret_value_utf8(
+            &cert_secret_data,
+            &cert_secret_name,
+            Certificate::SIGNER_CERT_KEY,
+        )?;
         // Write key and cert to the keychain directory
         let key_path = format!("{keychain_dir}/ndn.key");
         let cert_path = format!("{keychain_dir}/ndn.cert");
@@ -260,6 +365,28 @@ async fn main() -> anyhow::Result<()> {
             "Key and certificate written to {} and {}",
             key_path, cert_path
         );
+
+        if let Some(trust_anchors) = &resolved_trust_anchors {
+            for anchor in trust_anchors {
+                let secret_api = Api::<Secret>::namespaced(client.clone(), &anchor.namespace);
+                let trust_anchor_secret =
+                    load_secret_data(&secret_api, &anchor.cert_secret_name).await?;
+                let trust_anchor_cert = secret_value_utf8(
+                    &trust_anchor_secret,
+                    &anchor.cert_secret_name,
+                    Certificate::CERT_KEY,
+                )?;
+                let anchor_path = format!(
+                    "{keychain_dir}/trust-anchor-{}-{}.cert",
+                    anchor.namespace, anchor.resource_name
+                );
+                std::fs::write(&anchor_path, trust_anchor_cert)?;
+                info!(
+                    "Trust anchor certificate `{}` written to {}",
+                    anchor.cert_name, anchor_path
+                );
+            }
+        }
     }
 
     // Patch the status of the existing router
