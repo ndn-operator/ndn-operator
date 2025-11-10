@@ -143,7 +143,7 @@ pub fn create_owned_daemonset(
                                 VolumeMount {
                                     name: "keys".to_string(),
                                     mount_path: CONTAINER_KEYS_DIR.to_string(),
-                                    read_only: Some(true),
+                                    read_only: Some(false),
                                     ..VolumeMount::default()
                                 },
                             ]),
