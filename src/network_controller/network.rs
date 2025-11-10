@@ -554,7 +554,7 @@ impl Network {
     }
 
     pub fn host_socket_dir(&self) -> String {
-        format!("{}/{}", HOST_SOCKET_ROOT_DIR, self.namespace().unwrap())
+        format!("{}/{}/{}", HOST_SOCKET_ROOT_DIR, self.namespace().unwrap(), self.name_any())
     }
 
     pub fn host_socket_path(&self) -> String {
@@ -562,7 +562,7 @@ impl Network {
     }
 
     pub fn host_config_dir(&self) -> String {
-        format!("{}/{}", HOST_CONFIG_ROOT_DIR, self.namespace().unwrap())
+        format!("{}/{}/{}", HOST_CONFIG_ROOT_DIR, self.namespace().unwrap(), self.name_any())
     }
 
     pub fn host_config_path(&self) -> String {
@@ -570,7 +570,7 @@ impl Network {
     }
 
     pub fn host_keys_dir(&self) -> String {
-        format!("{}/{}", HOST_KEYS_ROOT_DIR, self.namespace().unwrap())
+        format!("{}/{}/{}", HOST_KEYS_ROOT_DIR, self.namespace().unwrap(), self.name_any())
     }
 
     fn create_owned_sa(&self) -> ServiceAccount {
