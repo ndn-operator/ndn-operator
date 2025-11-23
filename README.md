@@ -78,12 +78,12 @@ flowchart BT
 * Multi-cluster support
 
 ## Controller runtime flags
-The main controller binary (`ndn-operator`, also packaged as `ndnctl`) now accepts flags to decide which reconciler loops should run. When no flags are provided, every controller is enabled. Provide one or more of the following to run a subset:
+The main controller binary (`ndnctl`) accepts flags to decide which reconciler loops should run. When no flags are provided, every controller is enabled. Provide one or more of the following to run a subset:
 
 ```shell
-ndn-operator --nw --rt      # Run network and router controllers only
-ndn-operator --cert         # Run certificate controller only
-ndn-operator --neighbor --pod     # Run neighbor and pod-sync controllers
+ndnctl --nw --rt            # Run network and router controllers only
+ndnctl --cert               # Run certificate controller only
+ndnctl --neighbor --pod     # Run neighbor and pod-sync controllers
 ```
 
 ## Roadmap

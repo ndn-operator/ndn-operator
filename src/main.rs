@@ -20,7 +20,7 @@ use serde_with::skip_serializing_none;
 use std::{collections::BTreeSet, future::Future, pin::Pin};
 
 #[derive(Parser, Debug)]
-#[command(version, about = "Run ndn-operator controllers", long_about = None)]
+#[command(name = "ndnctl", bin_name = "ndnctl", version, about = "Run ndn-operator controllers", long_about = None)]
 struct Cli {
     #[command(flatten)]
     controllers: ControllerFlags,
