@@ -125,12 +125,37 @@ struct CombinedDiagnostics {
 
 impl ServerState {
     async fn diagnostics(&self) -> CombinedDiagnostics {
-        let network = self.network.as_ref().map(|s| s.diagnostics()).transpose().await;
-        let router = self.router.as_ref().map(|s| s.diagnostics()).transpose().await;
-        let neighbor = self.neighbor.as_ref().map(|s| s.diagnostics()).transpose().await;
+        let network = self
+            .network
+            .as_ref()
+            .map(|s| s.diagnostics())
+            .transpose()
+            .await;
+        let router = self
+            .router
+            .as_ref()
+            .map(|s| s.diagnostics())
+            .transpose()
+            .await;
+        let neighbor = self
+            .neighbor
+            .as_ref()
+            .map(|s| s.diagnostics())
+            .transpose()
+            .await;
         let pod = self.pod.as_ref().map(|s| s.diagnostics()).transpose().await;
-        let certificate = self.certificate.as_ref().map(|s| s.diagnostics()).transpose().await;
-        let external_certificate = self.external_certificate.as_ref().map(|s| s.diagnostics()).transpose().await;
+        let certificate = self
+            .certificate
+            .as_ref()
+            .map(|s| s.diagnostics())
+            .transpose()
+            .await;
+        let external_certificate = self
+            .external_certificate
+            .as_ref()
+            .map(|s| s.diagnostics())
+            .transpose()
+            .await;
 
         CombinedDiagnostics {
             network,
