@@ -28,7 +28,7 @@ spec:
           args:
             - "--nw"
             - "--bind"
-            - "{{ printf "%s:%d" .Values.controllers.network.bind.host .Values.controllers.network.bind.port }}"
+            - "{{ printf "%s:%d" .Values.controllers.network.bind.host (int .Values.controllers.network.bind.port) }}"
           env:
           - name: LOG
             value: "{{ .Values.controllers.network.logLevel }}"
@@ -39,7 +39,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: {{ $.Values.controllers.network.bind.port }}
+              port: {{ int $.Values.controllers.network.bind.port }}
               scheme: HTTP
             initialDelaySeconds: {{ $probe.initialDelaySeconds }}
             periodSeconds: {{ $probe.periodSeconds }}
@@ -64,7 +64,7 @@ spec:
           args:
             - "--rt"
             - "--bind"
-            - "{{ printf "%s:%d" .Values.controllers.router.bind.host .Values.controllers.router.bind.port }}"
+            - "{{ printf "%s:%d" .Values.controllers.router.bind.host (int .Values.controllers.router.bind.port) }}"
           env:
           - name: LOG
             value: "{{ .Values.controllers.router.logLevel }}"
@@ -75,7 +75,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: {{ $.Values.controllers.router.bind.port }}
+              port: {{ int $.Values.controllers.router.bind.port }}
               scheme: HTTP
             initialDelaySeconds: {{ $probe.initialDelaySeconds }}
             periodSeconds: {{ $probe.periodSeconds }}
@@ -100,7 +100,7 @@ spec:
           args:
             - "--neighbor"
             - "--bind"
-            - "{{ printf "%s:%d" .Values.controllers.neighbor.bind.host .Values.controllers.neighbor.bind.port }}"
+            - "{{ printf "%s:%d" .Values.controllers.neighbor.bind.host (int .Values.controllers.neighbor.bind.port) }}"
           env:
           - name: LOG
             value: "{{ .Values.controllers.neighbor.logLevel }}"
@@ -111,7 +111,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: {{ $.Values.controllers.neighbor.bind.port }}
+              port: {{ int $.Values.controllers.neighbor.bind.port }}
               scheme: HTTP
             initialDelaySeconds: {{ $probe.initialDelaySeconds }}
             periodSeconds: {{ $probe.periodSeconds }}
@@ -136,7 +136,7 @@ spec:
           args:
             - "--pod"
             - "--bind"
-            - "{{ printf "%s:%d" .Values.controllers.pod.bind.host .Values.controllers.pod.bind.port }}"
+            - "{{ printf "%s:%d" .Values.controllers.pod.bind.host (int .Values.controllers.pod.bind.port) }}"
           env:
           - name: LOG
             value: "{{ .Values.controllers.pod.logLevel }}"
@@ -147,7 +147,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: {{ $.Values.controllers.pod.bind.port }}
+              port: {{ int $.Values.controllers.pod.bind.port }}
               scheme: HTTP
             initialDelaySeconds: {{ $probe.initialDelaySeconds }}
             periodSeconds: {{ $probe.periodSeconds }}
@@ -172,7 +172,7 @@ spec:
           args:
             - "--cert"
             - "--bind"
-            - "{{ printf "%s:%d" .Values.controllers.certificate.bind.host .Values.controllers.certificate.bind.port }}"
+            - "{{ printf "%s:%d" .Values.controllers.certificate.bind.host (int .Values.controllers.certificate.bind.port) }}"
           env:
           - name: LOG
             value: "{{ .Values.controllers.certificate.logLevel }}"
@@ -183,7 +183,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: {{ $.Values.controllers.certificate.bind.port }}
+              port: {{ int $.Values.controllers.certificate.bind.port }}
               scheme: HTTP
             initialDelaySeconds: {{ $probe.initialDelaySeconds }}
             periodSeconds: {{ $probe.periodSeconds }}
@@ -208,7 +208,7 @@ spec:
           args:
             - "--ext-cert"
             - "--bind"
-            - "{{ printf "%s:%d" .Values.controllers.externalCertificate.bind.host .Values.controllers.externalCertificate.bind.port }}"
+            - "{{ printf "%s:%d" .Values.controllers.externalCertificate.bind.host (int .Values.controllers.externalCertificate.bind.port) }}"
           env:
           - name: LOG
             value: "{{ .Values.controllers.externalCertificate.logLevel }}"
@@ -219,7 +219,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: {{ $.Values.controllers.externalCertificate.bind.port }}
+              port: {{ int $.Values.controllers.externalCertificate.bind.port }}
               scheme: HTTP
             initialDelaySeconds: {{ $probe.initialDelaySeconds }}
             periodSeconds: {{ $probe.periodSeconds }}
