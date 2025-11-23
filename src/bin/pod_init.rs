@@ -15,7 +15,8 @@ use operator::{
     dv::RouterConfig,
     fw::{FacesConfig, ForwarderConfig, TcpConfig, UdpConfig, UnixConfig, WebSocketConfig},
     helper::{Decoded, decode_secret},
-    network_controller::{IpFamily, Router, TrustAnchorRef, is_router_created},
+    network_controller::{IpFamily, TrustAnchorRef},
+    router_controller::{Router, is_router_created},
     telemetry,
 };
 use serde_json::json;

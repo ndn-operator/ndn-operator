@@ -8,7 +8,7 @@ use crate::{
     },
     events_helper::emit_info,
     helper::get_my_image,
-    network_controller::{CertificateRef, Router, RouterSpec},
+    router_controller::{CertificateRef, Router, RouterSpec},
 };
 use duration_string::DurationString;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;

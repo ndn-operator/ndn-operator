@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::{Error, Result, events_helper::emit_info};
 use json_patch::{
     AddOperation, Patch as JsonPatch, PatchOperation, RemoveOperation, jsonptr::PointerBuf,
 };
@@ -17,7 +16,13 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::*;
 
-use super::{Context, NETWORK_LABEL_KEY, ROUTER_MANAGER_NAME, Router};
+use super::Context;
+use crate::{
+    Error, Result,
+    events_helper::emit_info,
+    network_controller::NETWORK_LABEL_KEY,
+    router_controller::{ROUTER_MANAGER_NAME, Router},
+};
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -37,7 +42,7 @@ pub struct NeighborLinkSpec {
     pub uri: String,
 }
 
-impl super::main::Context {
+impl Context {
     fn router_api_in_ns(&self, ns: &str) -> Api<Router> {
         Api::<Router>::namespaced(self.client.clone(), ns)
     }

@@ -3,12 +3,13 @@ use actix_web::{
 };
 use clap::{Args, Parser};
 use futures::future::join_all;
-use operator::cert_controller::{State as CertState, run_cert};
 use operator::{
     self,
-    network_controller::{
-        State as NetworkState, run_neighbor_link, run_nw, run_pod_sync, run_router,
-    },
+    cert_controller::{State as CertState, run_cert},
+    neighbor_link_controller::{State as NeighborState, run_neighbor_link},
+    network_controller::{State as NetworkState, run_nw},
+    pod_controller::{State as PodState, run_pod_sync},
+    router_controller::{State as RouterState, run_router},
     telemetry,
 };
 use std::{collections::BTreeSet, future::Future, pin::Pin};
@@ -65,7 +66,7 @@ impl ControllerFlags {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Controllers {
+enum Controllers{
     Network,
     Router,
     NeighborLink,
@@ -95,13 +96,13 @@ impl Controllers {
                 run_nw(NetworkState::default()).await;
             }),
             Controllers::Router => Box::pin(async move {
-                run_router(NetworkState::default()).await;
+                run_router(RouterState::default()).await;
             }),
             Controllers::NeighborLink => Box::pin(async move {
-                run_neighbor_link(NetworkState::default()).await;
+                run_neighbor_link(NeighborState::default()).await;
             }),
             Controllers::PodSync => Box::pin(async move {
-                run_pod_sync(NetworkState::default()).await;
+                run_pod_sync(PodState::default()).await;
             }),
             Controllers::Certificate => Box::pin(async move {
                 run_cert(CertState::default()).await;
@@ -111,7 +112,10 @@ impl Controllers {
 }
 
 fn controller_futures(selection: &ControllerSet) -> Vec<ControllerFuture> {
-    selection.iter().map(|controller| controller.spawn()).collect()
+    selection
+        .iter()
+        .map(|controller| controller.spawn())
+        .collect()
 }
 
 #[get("/health")]
@@ -172,10 +176,7 @@ mod tests {
             ..Default::default()
         };
         let selection = flags.selection();
-        let expected = BTreeSet::from([
-            Controllers::Router,
-            Controllers::Certificate,
-        ]);
+        let expected = BTreeSet::from([Controllers::Router, Controllers::Certificate]);
         assert_eq!(selection, expected);
     }
 

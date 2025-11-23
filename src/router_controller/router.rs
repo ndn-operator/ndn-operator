@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use tracing::*;
 
-use super::{Context, NETWORK_LABEL_KEY};
-use crate::{Error, Result};
+use super::Context;
+use crate::{Error, Result, network_controller::NETWORK_LABEL_KEY};
 
 pub static ROUTER_FINALIZER: &str = "router.named-data.net/finalizer";
 pub static ROUTER_MANAGER_NAME: &str = "router-controller";

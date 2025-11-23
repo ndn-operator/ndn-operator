@@ -1,7 +1,9 @@
 use kube::CustomResourceExt;
 use operator::{
     cert_controller::{Certificate, ExternalCertificate},
-    network_controller::{NeighborLink, Network, Router},
+    neighbor_link_controller::NeighborLink,
+    network_controller::Network,
+    router_controller::Router,
 };
 
 use clap::Parser;
