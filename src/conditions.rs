@@ -81,3 +81,80 @@ pub trait Conditions {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    #[derive(Default)]
+    struct DummyConditions {
+        conds: Option<Vec<K8sCondition>>,
+    }
+
+    impl Conditions for DummyConditions {
+        fn conditions(&self) -> &Option<Vec<K8sCondition>> {
+            &self.conds
+        }
+
+        fn conditions_mut(&mut self) -> &mut Option<Vec<K8sCondition>> {
+            &mut self.conds
+        }
+    }
+
+    #[test]
+    fn make_condition_populates_core_fields() {
+        let dummy = DummyConditions::default();
+        let cond = dummy.make_condition("Ready", true, "Reason", "Message", 7);
+        assert_eq!(cond.type_, "Ready");
+        assert_eq!(cond.status, "True");
+        assert_eq!(cond.reason, "Reason");
+        assert_eq!(cond.message, "Message");
+        assert_eq!(cond.observed_generation, Some(7));
+    }
+
+    #[test]
+    fn upsert_condition_preserves_transition_time_on_same_status() {
+        let mut dummy = DummyConditions::default();
+        let original_time = k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(Utc::now());
+        dummy.conds = Some(vec![K8sCondition {
+            type_: "Ready".into(),
+            status: "True".into(),
+            reason: "Initial".into(),
+            message: "Initial".into(),
+            observed_generation: Some(1),
+            last_transition_time: original_time.clone(),
+        }]);
+
+        let updated = K8sCondition {
+            type_: "Ready".into(),
+            status: "True".into(),
+            reason: "Updated".into(),
+            message: "Updated".into(),
+            observed_generation: Some(2),
+            last_transition_time: k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(Utc::now()),
+        };
+        dummy.upsert_condition(updated);
+
+        let cond = dummy.conditions().as_ref().unwrap().first().unwrap();
+        assert_eq!(cond.reason, "Updated");
+        assert_eq!(cond.message, "Updated");
+        assert_eq!(cond.observed_generation, Some(2));
+        assert_eq!(cond.last_transition_time.0, original_time.0);
+    }
+
+    #[test]
+    fn upsert_bool_and_clear_conditions_workflow() {
+        let mut dummy = DummyConditions::default();
+        dummy.upsert_bool("Ready", true, "Init", Some("ok"), 1);
+        dummy.upsert_bool("Ready", false, "Fail", Some("not ok"), 2);
+
+        let cond = dummy.conditions().as_ref().unwrap().first().unwrap();
+        assert_eq!(cond.status, "False");
+        assert_eq!(cond.reason, "Fail");
+        assert_eq!(cond.observed_generation, Some(2));
+
+        dummy.clear_conditions();
+        assert!(dummy.conditions().is_none());
+    }
+}

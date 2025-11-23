@@ -92,6 +92,34 @@ impl CertInfo {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn parses_key_info_text() {
+        let text = "Name: /example/KEY\nSigType: sha256\n";
+        let info = KeyInfo::from_key_text(text.into()).expect("parse key info");
+        assert_eq!(info.name, "/example/KEY");
+        assert_eq!(info.sig_type, "sha256");
+        assert!(info.key_text.contains("/example/KEY"));
+    }
+
+    #[test]
+    fn parses_certificate_text_and_validity() {
+        let text = "Name: /example/cert\nSigType: sha256\nSignerKey: /signer/key\nValidity: 2024-01-01 00:00:00 +0000 UTC - 2024-12-31 00:00:00 +0000 UTC\n";
+        let info = CertInfo::from_cert_text(text.into()).expect("parse cert info");
+        assert_eq!(info.name, "/example/cert");
+        assert_eq!(info.sig_type, "sha256");
+        assert_eq!(info.signer_key, "/signer/key");
+        let expected_start = chrono::Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let expected_end = chrono::Utc.with_ymd_and_hms(2024, 12, 31, 0, 0, 0).unwrap();
+        assert_eq!(info.validity.0, expected_start);
+        assert_eq!(info.validity.1, expected_end);
+    }
+}
+
 pub fn generate_key(prefix: &str) -> Result<KeyInfo, Error> {
     let ndnd_path: &str = option_env!("NDND_PATH").unwrap_or("/ndnd");
     let output = Command::new(ndnd_path)
