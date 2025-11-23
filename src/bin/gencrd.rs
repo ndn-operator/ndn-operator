@@ -1,7 +1,9 @@
 use kube::CustomResourceExt;
 use operator::{
     cert_controller::{Certificate, ExternalCertificate},
-    network_controller::{NeighborLink, Network, Router},
+    neighbor_controller::Neighbor,
+    network_controller::Network,
+    router_controller::Router,
 };
 
 use clap::Parser;
@@ -37,8 +39,8 @@ fn main() {
     )
     .unwrap();
     std::fs::write(
-        format!("{}/neighbor_link.yaml", args.output),
-        serde_yaml::to_string(&NeighborLink::crd()).unwrap(),
+        format!("{}/neighbor.yaml", args.output),
+        serde_yaml::to_string(&Neighbor::crd()).unwrap(),
     )
     .unwrap();
 }

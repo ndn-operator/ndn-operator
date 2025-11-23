@@ -131,7 +131,7 @@ spec:
                 additionalProperties:
                   type: string
                 default: {}
-                description: 'Map of external neighbors from NeighborLink resources. Key: NeighborLink name, Value: face URI'
+                description: 'Map of external neighbors from Neighbor resources. Key: Neighbor name, Value: face URI'
                 type: object
             type: object
         required:

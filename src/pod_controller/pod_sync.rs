@@ -1,6 +1,11 @@
 use std::sync::Arc;
 
-use crate::{Error, Result, cert_controller::Certificate};
+use crate::{
+    Error, Result,
+    cert_controller::Certificate,
+    network_controller::{DS_LABEL_KEY, Network},
+    router_controller::Router,
+};
 use k8s_openapi::api::core::v1::Pod;
 use kube::{
     Api, ResourceExt,
@@ -9,7 +14,7 @@ use kube::{
 };
 use tracing::*;
 
-use super::{Context, DS_LABEL_KEY, Network, Router};
+use super::Context;
 
 pub static POD_FINALIZER: &str = "pod.named-data.net/finalizer";
 pub static POD_SYNC_MANAGER_NAME: &str = "pod-sync";

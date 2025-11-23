@@ -33,3 +33,27 @@ pub struct Neighbor {
     pub uri: String,
     pub mtu: Option<u64>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn router_config_defaults_match_expected_values() {
+        let cfg = RouterConfig::default();
+        assert_eq!(cfg.network, "ndn");
+        assert_eq!(cfg.router, "ndnd");
+        assert_eq!(cfg.keychain, "insecure");
+        assert!(cfg.trust_anchors.is_none());
+        assert!(cfg.neighbors.is_none());
+    }
+
+    #[test]
+    fn neighbor_allows_optional_mtu() {
+        let neighbor = Neighbor {
+            uri: "udp://router".into(),
+            mtu: Some(9000),
+        };
+        assert_eq!(neighbor.mtu, Some(9000));
+    }
+}

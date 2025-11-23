@@ -1,0 +1,60 @@
+[graph]
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+all-features = true
+
+[advisories]
+unmaintained = "workspace"
+
+[bans]
+multiple-versions = "deny"
+wildcards = 'deny'
+deny = [
+    { crate = "git2", use-instead = "gix" },
+    { crate = "openssl", use-instead = "rustls" },
+    { crate = "openssl-sys", use-instead = "rustls" },
+    "libssh2-sys",
+    { crate = "cmake", use-instead = "cc" },
+    { crate = "windows", reason = "bloated and unnecessary", use-instead = "ideally inline bindings, practically, windows-sys" },
+]
+skip = [
+    { crate = "base64", reason = "warp pulls 0.21 while kube stack requires 0.22" },
+    { crate = "getrandom", reason = "tokio-rustls/ahash currently require incompatible major versions" },
+    { crate = "http", reason = "warp is still on http 0.2 while kube uses http 1.x" },
+    { crate = "http-body", reason = "warp uses 0.4 while hyper 1.x requires 1.0" },
+    { crate = "hyper", reason = "warp depends on hyper 0.14 alongside hyper 1.x from kube" },
+    { crate = "rustls", reason = "warp and kube require different major releases" },
+    { crate = "rustls-webpki", reason = "warp rustls 0.22 cannot share webpki with rustls 0.23" },
+    { crate = "socket2", reason = "actix/warp and tokio currently need both 0.5 and 0.6" },
+    { crate = "syn", reason = "mix of proc-macros depend on both syn 1 and 2" },
+    { crate = "thiserror", reason = "json-patch locks to 1.x while rest of workspace uses 2.x" },
+    { crate = "thiserror-impl", reason = "json-patch still requires the 1.x derive macros" },
+    { crate = "tokio-rustls", reason = "warp depends on 0.25 while kube stack needs 0.26" },
+]
+skip-tree = [
+    { crate = "windows-sys", reason = "a foundational crate for many that bumps far too frequently to ever have a shared version" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+
+[licenses]
+# We want really high confidence when inferring licenses from text
+confidence-threshold = 0.93
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+]

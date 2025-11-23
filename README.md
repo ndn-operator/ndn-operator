@@ -1,5 +1,6 @@
 # NDN Operator
 ![GitHub Tag](https://img.shields.io/github/v/tag/ndn-operator/ndn-operator?filter=v*&style=flat&label=version)
+[![codecov](https://codecov.io/github/ndn-operator/ndn-operator/graph/badge.svg?token=AD83S8LI12)](https://codecov.io/github/ndn-operator/ndn-operator)
 ![GitHub License](https://img.shields.io/github/license/ndn-operator/ndn-operator)
 [![Rust Report Card](https://rust-reportcard.xuri.me/badge/github.com/ndn-operator/ndn-operator)](https://rust-reportcard.xuri.me/report/github.com/ndn-operator/ndn-operator)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ndn-operator/ndn-operator/docker-push.yaml)
@@ -75,6 +76,15 @@ flowchart BT
 * Multiple networks per cluster
 * TLS management for ndnd
 * Multi-cluster support
+
+## Controller runtime flags
+The main controller binary (`ndnctl`) accepts flags to decide which reconciler loops should run. When no flags are provided, every controller is enabled. Provide one or more of the following to run a subset:
+
+```shell
+ndnctl --nw --rt            # Run network and router controllers only
+ndnctl --cert               # Run certificate controller only
+ndnctl --neighbor --pod     # Run neighbor and pod-sync controllers
+```
 
 ## Roadmap
 1. Basic functionality ✅

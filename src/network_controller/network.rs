@@ -4,11 +4,11 @@ use crate::{
     Error, Result,
     cert_controller::{
         Certificate, CertificateSpec, ExternalCertificate, IssuerRef, is_cert_valid,
-        is_external_cert_valid,
     },
     events_helper::emit_info,
+    ext_cert_controller::is_external_cert_valid,
     helper::get_my_image,
-    network_controller::{CertificateRef, Router, RouterSpec},
+    router_controller::{CertificateRef, Router, RouterSpec},
 };
 use duration_string::DurationString;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
@@ -744,5 +744,91 @@ impl Network {
             ..Certificate::default()
         };
         Ok(cert)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cert_controller::IssuerRef;
+    use std::collections::BTreeMap;
+
+    fn sample_network() -> Network {
+        let spec = NetworkSpec {
+            prefix: "/example".into(),
+            udp_unicast_port: 6363,
+            ip_family: IpFamily::IPv4,
+            node_selector: None,
+            ndnd: NdndSpec::default(),
+            operator: Some(OperatorSpec::default()),
+            router_cert_issuer: Some(IssuerRef {
+                name: "issuer".into(),
+                kind: "Certificate".into(),
+                namespace: None,
+            }),
+            trust_anchors: None,
+            faces: None,
+        };
+        let mut nw = Network::new("demo", spec);
+        nw.metadata.namespace = Some("demo-ns".into());
+        nw.metadata.uid = Some("uid-123".into());
+        nw.metadata.labels = Some(BTreeMap::from([("app".into(), "demo".into())]));
+        nw.metadata.annotations = Some(BTreeMap::from([("anno".into(), "value".into())]));
+        nw
+    }
+
+    #[test]
+    fn path_helpers_match_expected_layout() {
+        let nw = sample_network();
+        assert!(nw.container_socket_path().ends_with("demo.sock"));
+        assert!(nw.container_config_path().ends_with("demo.yml"));
+        assert!(nw.host_socket_path().contains("demo-ns"));
+        assert!(nw.host_config_path().contains("demo-ns"));
+        assert!(nw.host_keys_dir().contains("demo-ns"));
+    }
+
+    #[test]
+    fn create_owned_service_account_has_owner_reference() {
+        let nw = sample_network();
+        let sa = nw.create_owned_sa();
+        assert_eq!(sa.metadata.name.as_deref(), Some("demo"));
+        let owner_refs = sa.metadata.owner_references.as_ref().unwrap();
+        assert_eq!(owner_refs.len(), 1);
+        assert_eq!(owner_refs[0].name, "demo");
+    }
+
+    #[test]
+    fn create_owned_role_binding_targets_service_account() {
+        let nw = sample_network();
+        let rb = nw.create_owned_role_binding("svc".into(), "role".into());
+        let subject = rb.subjects.unwrap().pop().unwrap();
+        assert_eq!(subject.name, "svc");
+        assert_eq!(subject.namespace.as_deref(), Some("demo-ns"));
+        assert_eq!(rb.role_ref.name, "role");
+    }
+
+    #[test]
+    fn create_owned_router_populates_labels_and_prefix() {
+        let nw = sample_network();
+        let router = nw
+            .create_owned_router("router-1", "node-a", None)
+            .expect("router");
+        assert_eq!(router.spec.prefix, "/example/router-1");
+        assert_eq!(router.spec.node_name, "node-a");
+        let labels = router.metadata.labels.unwrap();
+        assert_eq!(labels.get(super::NETWORK_LABEL_KEY), Some(&"demo".into()));
+        assert!(router.metadata.annotations.unwrap().contains_key("anno"));
+    }
+
+    #[test]
+    fn create_owned_certificate_uses_router_name() {
+        let nw = sample_network();
+        let issuer = nw.spec.router_cert_issuer.as_ref().unwrap().clone();
+        let cert = nw
+            .create_owned_certificate("router-1", "router-1", &issuer)
+            .expect("cert");
+        assert_eq!(cert.spec.prefix, "/example/router-1/32=DV");
+        assert_eq!(cert.spec.issuer.name, issuer.name);
+        assert_eq!(cert.metadata.name.as_deref(), Some("router-1"));
     }
 }
