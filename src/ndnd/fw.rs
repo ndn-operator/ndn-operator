@@ -292,7 +292,7 @@ mod tests {
         let faces = FacesConfig::default();
         let udp = faces.udp.as_ref().unwrap();
         assert_eq!(udp.port_unicast, Some(6363));
-        assert_eq!(udp.enabled_unicast, false);
+        assert!(!udp.enabled_unicast);
         let ws = faces.websocket.as_ref().unwrap();
         assert_eq!(ws.port, 9696);
         assert!(!ws.tls_enabled);
