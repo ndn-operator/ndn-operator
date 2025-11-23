@@ -17,13 +17,16 @@ use operator::{
 };
 use serde::Serialize;
 use serde_with::skip_serializing_none;
-use std::{collections::BTreeSet, future::Future, pin::Pin};
+use std::{collections::BTreeSet, future::Future, net::SocketAddr, pin::Pin};
 
 #[derive(Parser, Debug)]
 #[command(name = "ndnctl", bin_name = "ndnctl", version, about = "Run ndn-operator controllers", long_about = None)]
 struct Cli {
     #[command(flatten)]
     controllers: ControllerFlags,
+    /// Address and port for the diagnostics HTTP server
+    #[arg(long = "bind", value_name = "ADDR", default_value = "0.0.0.0:8080")]
+    bind: SocketAddr,
 }
 
 #[derive(Args, Debug, Default, Clone, Copy)]
@@ -228,6 +231,7 @@ async fn main() -> anyhow::Result<()> {
     telemetry::init().await;
 
     let controllers = cli.controllers.selection();
+    let bind_addr = cli.bind;
 
     let (controller_futures, server_state) = controller_futures(&controllers);
     let controllers_task = async {
@@ -241,7 +245,7 @@ async fn main() -> anyhow::Result<()> {
             .service(index)
             .service(health)
     })
-    .bind("0.0.0.0:8080")?
+    .bind(bind_addr)?
     .shutdown_timeout(5);
 
     // All runtimes implements graceful shutdown, so poll until all are done
