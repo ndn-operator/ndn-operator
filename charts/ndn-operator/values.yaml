@@ -3,15 +3,75 @@ image:
   tag: 0.5.0
   pullPolicy: IfNotPresent
 
-logLevel: info
-
-resources:
-  limits:
-    cpu: 100m
-    memory: 128Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
+controllers:
+  network:
+    logLevel: info
+    bind: 0.0.0.0:8080
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  router:
+    logLevel: info
+    bind: 0.0.0.0:8081
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  neighbor:
+    logLevel: info
+    bind: 0.0.0.0:8082
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  pod:
+    logLevel: info
+    bind: 0.0.0.0:8083
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  certificate:
+    logLevel: info
+    bind: 0.0.0.0:8084
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  externalCertificate:
+    logLevel: info
+    bind: 0.0.0.0:8085
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
 
 injector:
   useCertManager: false
+  logLevel: info
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

@@ -19,4 +19,4 @@ COPY --from=builder /usr/src/app/target/${TARGET}/release/sidecar /
 COPY --from=builder /usr/src/app/target/${TARGET}/release/injector /
 COPY --from=ndnd /ndnd /
 
-CMD ["/ndnctl"]
+ENTRYPOINT ["/ndnctl"]

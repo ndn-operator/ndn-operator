@@ -22,21 +22,135 @@ spec:
     spec:
       serviceAccountName: ndn-controller
       containers:
-        - name: ndn-controller
+        - name: network-controller
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          args:
+            - "--nw"
+            - "--bind"
+            - "{{ .Values.controllers.network.bind }}"
           env:
           - name: LOG
-            value: "{{ .Values.logLevel }}"
+            value: "{{ .Values.controllers.network.logLevel }}"
           - name: TMP_DIR
             value: /tmp
           resources:
             limits:
-              cpu: "{{ .Values.resources.limits.cpu }}"
-              memory: "{{ .Values.resources.limits.memory }}"
+              cpu: "{{ .Values.controllers.network.resources.limits.cpu }}"
+              memory: "{{ .Values.controllers.network.resources.limits.memory }}"
             requests:
-              cpu: "{{ .Values.resources.requests.cpu }}"
-              memory: "{{ .Values.resources.requests.memory }}"
+              cpu: "{{ .Values.controllers.network.resources.requests.cpu }}"
+              memory: "{{ .Values.controllers.network.resources.requests.memory }}"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+        - name: router-controller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          args:
+            - "--rt"
+            - "--bind"
+            - "{{ .Values.controllers.router.bind }}"
+          env:
+          - name: LOG
+            value: "{{ .Values.controllers.router.logLevel }}"
+          - name: TMP_DIR
+            value: /tmp
+          resources:
+            limits:
+              cpu: "{{ .Values.controllers.router.resources.limits.cpu }}"
+              memory: "{{ .Values.controllers.router.resources.limits.memory }}"
+            requests:
+              cpu: "{{ .Values.controllers.router.resources.requests.cpu }}"
+              memory: "{{ .Values.controllers.router.resources.requests.memory }}"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+        - name: neighbor-controller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          args:
+            - "--neighbor"
+            - "--bind"
+            - "{{ .Values.controllers.neighbor.bind }}"
+          env:
+          - name: LOG
+            value: "{{ .Values.controllers.neighbor.logLevel }}"
+          - name: TMP_DIR
+            value: /tmp
+          resources:
+            limits:
+              cpu: "{{ .Values.controllers.neighbor.resources.limits.cpu }}"
+              memory: "{{ .Values.controllers.neighbor.resources.limits.memory }}"
+            requests:
+              cpu: "{{ .Values.controllers.neighbor.resources.requests.cpu }}"
+              memory: "{{ .Values.controllers.neighbor.resources.requests.memory }}"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+        - name: pod-controller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          args:
+            - "--pod"
+            - "--bind"
+            - "{{ .Values.controllers.pod.bind }}"
+          env:
+          - name: LOG
+            value: "{{ .Values.controllers.pod.logLevel }}"
+          - name: TMP_DIR
+            value: /tmp
+          resources:
+            limits:
+              cpu: "{{ .Values.controllers.pod.resources.limits.cpu }}"
+              memory: "{{ .Values.controllers.pod.resources.limits.memory }}"
+            requests:
+              cpu: "{{ .Values.controllers.pod.resources.requests.cpu }}"
+              memory: "{{ .Values.controllers.pod.resources.requests.memory }}"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+        - name: cert-controller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          args:
+            - "--cert"
+            - "--bind"
+            - "{{ .Values.controllers.certificate.bind }}"
+          env:
+          - name: LOG
+            value: "{{ .Values.controllers.certificate.logLevel }}"
+          - name: TMP_DIR
+            value: /tmp
+          resources:
+            limits:
+              cpu: "{{ .Values.controllers.certificate.resources.limits.cpu }}"
+              memory: "{{ .Values.controllers.certificate.resources.limits.memory }}"
+            requests:
+              cpu: "{{ .Values.controllers.certificate.resources.requests.cpu }}"
+              memory: "{{ .Values.controllers.certificate.resources.requests.memory }}"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+        - name: ext-cert-controller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          args:
+            - "--ext-cert"
+            - "--bind"
+            - "{{ .Values.controllers.externalCertificate.bind }}"
+          env:
+          - name: LOG
+            value: "{{ .Values.controllers.externalCertificate.logLevel }}"
+          - name: TMP_DIR
+            value: /tmp
+          resources:
+            limits:
+              cpu: "{{ .Values.controllers.externalCertificate.resources.limits.cpu }}"
+              memory: "{{ .Values.controllers.externalCertificate.resources.limits.memory }}"
+            requests:
+              cpu: "{{ .Values.controllers.externalCertificate.resources.requests.cpu }}"
+              memory: "{{ .Values.controllers.externalCertificate.resources.requests.memory }}"
           volumeMounts:
             - name: tmp
               mountPath: /tmp
