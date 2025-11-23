@@ -7,7 +7,7 @@ use kube::{
 };
 use operator::{
     Error,
-    network_controller::{ROUTER_MANAGER_NAME, Router},
+    router_controller::{ROUTER_MANAGER_NAME, Router},
     telemetry,
 };
 use std::process::Command;

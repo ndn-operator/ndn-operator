@@ -1,5 +1,5 @@
 apiVersion: named-data.net/v1alpha1
-kind: NeighborLink
+kind: Neighbor
 metadata:
   name: to-test2
   namespace: mynetwork

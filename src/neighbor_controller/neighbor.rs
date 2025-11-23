@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::{Error, Result, events_helper::emit_info};
 use json_patch::{
     AddOperation, Patch as JsonPatch, PatchOperation, RemoveOperation, jsonptr::PointerBuf,
 };
@@ -17,33 +16,39 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::*;
 
-use super::{Context, NETWORK_LABEL_KEY, ROUTER_MANAGER_NAME, Router};
+use super::Context;
+use crate::{
+    Error, Result,
+    events_helper::emit_info,
+    network_controller::NETWORK_LABEL_KEY,
+    router_controller::{ROUTER_MANAGER_NAME, Router},
+};
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 #[kube(
     group = "named-data.net",
     version = "v1alpha1",
-    kind = "NeighborLink",
+    kind = "Neighbor",
     derive = "Default",
     namespaced,
-    shortname = "nl",
-    doc = "NeighborLink references a public face of an external NDN network"
+    shortname = "nb",
+    doc = "Neighbor references a public face of an external NDN network"
 )]
-pub struct NeighborLinkSpec {
-    /// Name of the local Network CR this link applies to
+pub struct NeighborSpec {
+    /// Name of the local Network CR this neighbor applies to
     pub network: String,
     /// Public URI of the neighbor network (e.g., tcp://host:port)
     pub uri: String,
 }
 
-impl super::main::Context {
+impl Context {
     fn router_api_in_ns(&self, ns: &str) -> Api<Router> {
         Api::<Router>::namespaced(self.client.clone(), ns)
     }
 }
 
-impl NeighborLink {
+impl Neighbor {
     pub async fn reconcile(self: Arc<Self>, ctx: Arc<Context>) -> Result<Action> {
         let ns = self.namespace().unwrap();
         let api_router = ctx.router_api_in_ns(&ns);
@@ -63,7 +68,7 @@ impl NeighborLink {
             })];
             let patch = Patch::Json::<()>(JsonPatch(patches));
             debug!(
-                "NeighborLink status patch to {}: {:?}",
+                "Neighbor status patch to {}: {:?}",
                 router.name_any(),
                 patch
             );
@@ -76,7 +81,7 @@ impl NeighborLink {
                 router,
                 "OuterNeighborInserted",
                 "Updated",
-                Some(format!("From NeighborLink `{}`", self.name_any())),
+                Some(format!("From Neighbor `{}`", self.name_any())),
             )
             .await;
         }
@@ -100,7 +105,7 @@ impl NeighborLink {
             })];
             let patch = Patch::Json::<()>(JsonPatch(patches));
             debug!(
-                "NeighborLink cleanup patch to {}: {:?}",
+                "Neighbor cleanup patch to {}: {:?}",
                 router.name_any(),
                 patch
             );
@@ -114,7 +119,7 @@ impl NeighborLink {
                 router,
                 "OuterNeighborRemoved",
                 "Updated",
-                Some(format!("From NeighborLink `{}`", self.name_any())),
+                Some(format!("From Neighbor `{}`", self.name_any())),
             )
             .await;
         }
@@ -122,13 +127,13 @@ impl NeighborLink {
     }
 }
 
-pub async fn reconcile_neighbor_link(nl: Arc<NeighborLink>, ctx: Arc<Context>) -> Result<Action> {
+pub async fn reconcile_neighbor(nl: Arc<Neighbor>, ctx: Arc<Context>) -> Result<Action> {
     let ns = nl.namespace().unwrap();
-    let api_nl: Api<NeighborLink> = Api::namespaced(ctx.client.clone(), &ns);
-    info!("Reconciling NeighborLink \"{}\" in {}", nl.name_any(), ns);
+    let api_nl: Api<Neighbor> = Api::namespaced(ctx.client.clone(), &ns);
+    info!("Reconciling Neighbor \"{}\" in {}", nl.name_any(), ns);
     finalizer(
         &api_nl,
-        "neighborlink.named-data.net/finalizer",
+        "neighbor.named-data.net/finalizer",
         nl,
         move |event| async move {
             match event {

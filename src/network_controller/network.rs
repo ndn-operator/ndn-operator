@@ -4,11 +4,11 @@ use crate::{
     Error, Result,
     cert_controller::{
         Certificate, CertificateSpec, ExternalCertificate, IssuerRef, is_cert_valid,
-        is_external_cert_valid,
     },
     events_helper::emit_info,
+    ext_cert_controller::is_external_cert_valid,
     helper::get_my_image,
-    network_controller::{CertificateRef, Router, RouterSpec},
+    router_controller::{CertificateRef, Router, RouterSpec},
 };
 use duration_string::DurationString;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;

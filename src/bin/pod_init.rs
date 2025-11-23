@@ -10,12 +10,14 @@ use operator::{
     Error, NdndConfig,
     cert_controller::{
         Certificate, CertificateStatus, ExternalCertificate, ExternalCertificateStatus,
-        is_cert_valid, is_external_cert_valid,
+        is_cert_valid,
     },
     dv::RouterConfig,
+    ext_cert_controller::is_external_cert_valid,
     fw::{FacesConfig, ForwarderConfig, TcpConfig, UdpConfig, UnixConfig, WebSocketConfig},
     helper::{Decoded, decode_secret},
-    network_controller::{IpFamily, Router, TrustAnchorRef, is_router_created},
+    network_controller::{IpFamily, TrustAnchorRef},
+    router_controller::{Router, is_router_created},
     telemetry,
 };
 use serde_json::json;

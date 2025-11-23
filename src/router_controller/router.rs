@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use tracing::*;
 
-use super::{Context, NETWORK_LABEL_KEY};
-use crate::{Error, Result};
+use super::Context;
+use crate::{Error, Result, network_controller::NETWORK_LABEL_KEY};
 
 pub static ROUTER_FINALIZER: &str = "router.named-data.net/finalizer";
 pub static ROUTER_MANAGER_NAME: &str = "router-controller";
@@ -70,7 +70,7 @@ pub struct RouterStatus {
     pub inner_face: Option<String>,
     /// Map of neighbor routers and their internal face URIs. Key: router name, Value: face URI
     pub inner_neighbors: BTreeMap<String, String>,
-    /// Map of external neighbors from NeighborLink resources. Key: NeighborLink name, Value: face URI
+    /// Map of external neighbors from Neighbor resources. Key: Neighbor name, Value: face URI
     pub outer_neighbors: BTreeMap<String, String>,
     /// Standard Kubernetes-style conditions for this router
     /// - Ready: Initialized && Online && FaceReady
