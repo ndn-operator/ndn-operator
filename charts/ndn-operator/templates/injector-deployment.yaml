@@ -36,7 +36,7 @@ spec:
           readOnly: true
         env:
         - name: LOG
-          value: "{{ .Values.logLevel }}"
+          value: "{{ .Values.injector.logLevel }}"
         - name: NDN_INJECTOR_TLS_CERT_FILE
           value: /etc/ndn/injector/tls.crt
         - name: NDN_INJECTOR_TLS_KEY_FILE
@@ -49,8 +49,8 @@ spec:
           protocol: TCP
         resources:
           limits:
-            cpu: "{{ .Values.resources.limits.cpu }}"
-            memory: "{{ .Values.resources.limits.memory }}"
+            cpu: "{{ .Values.injector.resources.limits.cpu }}"
+            memory: "{{ .Values.injector.resources.limits.memory }}"
           requests:
-            cpu: "{{ .Values.resources.requests.cpu }}"
-            memory: "{{ .Values.resources.requests.memory }}"
+            cpu: "{{ .Values.injector.resources.requests.cpu }}"
+            memory: "{{ .Values.injector.resources.requests.memory }}"
