@@ -40,6 +40,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub mod cert_controller;
 pub mod conditions;
 mod events_helper;
+pub mod ext_cert_controller;
 pub mod helper;
 mod ndnd;
 pub mod neighbor_link_controller;

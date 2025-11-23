@@ -6,6 +6,7 @@ use futures::future::join_all;
 use operator::{
     self,
     cert_controller::{State as CertState, run_cert},
+    ext_cert_controller::{State as ExtCertState, run_ext_cert},
     neighbor_link_controller::{State as NeighborState, run_neighbor_link},
     network_controller::{State as NetworkState, run_nw},
     pod_controller::{State as PodState, run_pod_sync},
@@ -38,6 +39,9 @@ struct ControllerFlags {
     /// Run certificate controller
     #[arg(long = "cert", action = clap::ArgAction::SetTrue)]
     cert: bool,
+    /// Run external certificate controller
+    #[arg(long = "ext-cert", action = clap::ArgAction::SetTrue)]
+    ext_cert: bool,
 }
 
 impl ControllerFlags {
@@ -58,6 +62,9 @@ impl ControllerFlags {
         if self.cert {
             set.insert(Controllers::Certificate);
         }
+        if self.ext_cert {
+            set.insert(Controllers::ExternalCertificate);
+        }
         if set.is_empty() {
             set.extend(Controllers::all());
         }
@@ -66,22 +73,24 @@ impl ControllerFlags {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Controllers{
+enum Controllers {
     Network,
     Router,
     NeighborLink,
     PodSync,
     Certificate,
+    ExternalCertificate,
 }
 
 impl Controllers {
-    fn all() -> [Self; 5] {
+    fn all() -> [Self; 6] {
         [
             Self::Network,
             Self::Router,
             Self::NeighborLink,
             Self::PodSync,
             Self::Certificate,
+            Self::ExternalCertificate,
         ]
     }
 }
@@ -106,6 +115,9 @@ impl Controllers {
             }),
             Controllers::Certificate => Box::pin(async move {
                 run_cert(CertState::default()).await;
+            }),
+            Controllers::ExternalCertificate => Box::pin(async move {
+                run_ext_cert(ExtCertState::default()).await;
             }),
         }
     }

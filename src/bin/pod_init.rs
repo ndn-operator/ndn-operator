@@ -10,9 +10,10 @@ use operator::{
     Error, NdndConfig,
     cert_controller::{
         Certificate, CertificateStatus, ExternalCertificate, ExternalCertificateStatus,
-        is_cert_valid, is_external_cert_valid,
+        is_cert_valid,
     },
     dv::RouterConfig,
+    ext_cert_controller::is_external_cert_valid,
     fw::{FacesConfig, ForwarderConfig, TcpConfig, UdpConfig, UnixConfig, WebSocketConfig},
     helper::{Decoded, decode_secret},
     network_controller::{IpFamily, TrustAnchorRef},
