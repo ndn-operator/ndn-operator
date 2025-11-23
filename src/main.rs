@@ -125,37 +125,30 @@ struct CombinedDiagnostics {
 
 impl ServerState {
     async fn diagnostics(&self) -> CombinedDiagnostics {
-        let network = self
-            .network
-            .as_ref()
-            .map(|s| s.diagnostics())
-            .transpose()
-            .await;
-        let router = self
-            .router
-            .as_ref()
-            .map(|s| s.diagnostics())
-            .transpose()
-            .await;
-        let neighbor = self
-            .neighbor
-            .as_ref()
-            .map(|s| s.diagnostics())
-            .transpose()
-            .await;
-        let pod = self.pod.as_ref().map(|s| s.diagnostics()).transpose().await;
-        let certificate = self
-            .certificate
-            .as_ref()
-            .map(|s| s.diagnostics())
-            .transpose()
-            .await;
-        let external_certificate = self
-            .external_certificate
-            .as_ref()
-            .map(|s| s.diagnostics())
-            .transpose()
-            .await;
+        let network = match &self.network {
+            Some(state) => Some(state.diagnostics().await),
+            None => None,
+        };
+        let router = match &self.router {
+            Some(state) => Some(state.diagnostics().await),
+            None => None,
+        };
+        let neighbor = match &self.neighbor {
+            Some(state) => Some(state.diagnostics().await),
+            None => None,
+        };
+        let pod = match &self.pod {
+            Some(state) => Some(state.diagnostics().await),
+            None => None,
+        };
+        let certificate = match &self.certificate {
+            Some(state) => Some(state.diagnostics().await),
+            None => None,
+        };
+        let external_certificate = match &self.external_certificate {
+            Some(state) => Some(state.diagnostics().await),
+            None => None,
+        };
 
         CombinedDiagnostics {
             network,
