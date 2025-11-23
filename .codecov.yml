@@ -21,3 +21,4 @@ ignore:
   - "src/pod_controller/pod_sync.rs"
   - "src/router_controller/main.rs"
   - "src/router_controller/router.rs"
+  - "src/macros/controller.rs"
