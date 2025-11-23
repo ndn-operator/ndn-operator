@@ -26,7 +26,6 @@ macro_rules! controller_scaffold {
 
         #[derive(Clone, serde::Serialize)]
         pub struct Diagnostics {
-            #[serde(deserialize_with = "from_ts")]
             pub last_event: chrono::DateTime<chrono::Utc>,
             #[serde(skip)]
             pub reporter: kube::runtime::events::Reporter,
