@@ -83,7 +83,7 @@ The main controller binary (`ndn-operator`, also packaged as `ndnctl`) now accep
 ```shell
 ndn-operator --nw --rt      # Run network and router controllers only
 ndn-operator --cert         # Run certificate controller only
-ndn-operator --nl --pod     # Run neighbor-link and pod-sync controllers
+ndn-operator --neighbor --pod     # Run neighbor and pod-sync controllers
 ```
 
 ## Roadmap

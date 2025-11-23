@@ -44,7 +44,7 @@ pub mod ext_cert_controller;
 pub mod helper;
 pub mod macros;
 mod ndnd;
-pub mod neighbor_link_controller;
+pub mod neighbor_controller;
 pub mod network_controller;
 pub mod pod_controller;
 pub mod router_controller;

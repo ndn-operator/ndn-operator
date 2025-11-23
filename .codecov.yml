@@ -12,7 +12,7 @@ ignore:
   - "src/cert_controller/reconcile.rs"
   - "src/cert_controller/crypto.rs"
   - "src/network_controller/main.rs"
-  - "src/network_controller/neighbor_link.rs"
+  - "src/neighbor_controller/neighbor.rs"
   - "src/network_controller/pod_sync.rs"
   - "src/network_controller/network.rs"
   - "src/network_controller/router.rs"

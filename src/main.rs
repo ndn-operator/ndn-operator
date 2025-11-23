@@ -7,7 +7,7 @@ use operator::{
     self,
     cert_controller::{State as CertState, run_cert},
     ext_cert_controller::{State as ExtCertState, run_ext_cert},
-    neighbor_link_controller::{State as NeighborState, run_neighbor_link},
+    neighbor_controller::{State as NeighborState, run_neighbor},
     network_controller::{State as NetworkState, run_nw},
     pod_controller::{State as PodState, run_pod_sync},
     router_controller::{State as RouterState, run_router},
@@ -30,9 +30,9 @@ struct ControllerFlags {
     /// Run router controller
     #[arg(long = "rt", action = clap::ArgAction::SetTrue)]
     rt: bool,
-    /// Run neighbor-link controller
-    #[arg(long = "nl", action = clap::ArgAction::SetTrue)]
-    nl: bool,
+    /// Run neighbor controller
+    #[arg(long = "neighbor", action = clap::ArgAction::SetTrue, alias = "nl")]
+    neighbor: bool,
     /// Run pod-sync controller
     #[arg(long = "pod", action = clap::ArgAction::SetTrue)]
     pod: bool,
@@ -53,8 +53,8 @@ impl ControllerFlags {
         if self.rt {
             set.insert(Controllers::Router);
         }
-        if self.nl {
-            set.insert(Controllers::NeighborLink);
+        if self.neighbor {
+            set.insert(Controllers::Neighbor);
         }
         if self.pod {
             set.insert(Controllers::PodSync);
@@ -76,7 +76,7 @@ impl ControllerFlags {
 enum Controllers {
     Network,
     Router,
-    NeighborLink,
+    Neighbor,
     PodSync,
     Certificate,
     ExternalCertificate,
@@ -87,7 +87,7 @@ impl Controllers {
         [
             Self::Network,
             Self::Router,
-            Self::NeighborLink,
+            Self::Neighbor,
             Self::PodSync,
             Self::Certificate,
             Self::ExternalCertificate,
@@ -107,8 +107,8 @@ impl Controllers {
             Controllers::Router => Box::pin(async move {
                 run_router(RouterState::default()).await;
             }),
-            Controllers::NeighborLink => Box::pin(async move {
-                run_neighbor_link(NeighborState::default()).await;
+            Controllers::Neighbor => Box::pin(async move {
+                run_neighbor(NeighborState::default()).await;
             }),
             Controllers::PodSync => Box::pin(async move {
                 run_pod_sync(PodState::default()).await;
