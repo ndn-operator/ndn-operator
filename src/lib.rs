@@ -42,6 +42,7 @@ pub mod conditions;
 mod events_helper;
 pub mod ext_cert_controller;
 pub mod helper;
+pub mod macros;
 mod ndnd;
 pub mod neighbor_link_controller;
 pub mod network_controller;
