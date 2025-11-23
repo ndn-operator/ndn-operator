@@ -344,3 +344,91 @@ fn network_init_env(nw: &Network, container_socket_path: &str) -> Vec<EnvVar> {
 
     envs
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cert_controller::IssuerRef;
+    use crate::network_controller::{
+        FacesSpec, IpFamily, NdndSpec, NetworkSpec, NetworkTcpFaceSpec, NetworkWebSocketFaceSpec,
+        OperatorSpec, TrustAnchorRef,
+    };
+
+    fn build_network(with_issuer: bool) -> Network {
+        let spec = NetworkSpec {
+            prefix: "/example/net".into(),
+            udp_unicast_port: 6363,
+            ip_family: IpFamily::IPv6,
+            node_selector: None,
+            ndnd: NdndSpec {
+                image: "ndnd:test".into(),
+            },
+            operator: Some(OperatorSpec {
+                image: "op:test".into(),
+            }),
+            router_cert_issuer: if with_issuer {
+                Some(IssuerRef {
+                    name: "issuer".into(),
+                    kind: "Certificate".into(),
+                    namespace: Some("ns".into()),
+                })
+            } else {
+                None
+            },
+            trust_anchors: Some(vec![TrustAnchorRef {
+                name: "root".into(),
+                kind: "Certificate".into(),
+                namespace: Some("ns".into()),
+            }]),
+            faces: Some(FacesSpec {
+                tcp: Some(NetworkTcpFaceSpec {
+                    port: 7000,
+                    service_template: Default::default(),
+                }),
+                websocket: Some(NetworkWebSocketFaceSpec {
+                    port: 7001,
+                    service_template: Default::default(),
+                }),
+            }),
+        };
+
+        let mut nw = Network::new("demo", spec);
+        nw.metadata.namespace = Some("demo-ns".into());
+        nw.metadata.uid = Some("uid-123".into());
+        nw
+    }
+
+    fn env_value(envs: &[EnvVar], key: &str) -> Option<String> {
+        envs.iter()
+            .find(|e| e.name == key)
+            .and_then(|e| e.value.clone())
+    }
+
+    #[test]
+    fn network_init_env_populates_tcp_ws_and_trust_anchors() {
+        let nw = build_network(true);
+        let envs = network_init_env(&nw, "/run/demo.sock");
+        assert_eq!(
+            env_value(&envs, "NDN_NETWORK_NAME").as_deref(),
+            Some("demo")
+        );
+        assert_eq!(
+            env_value(&envs, "NDN_SOCKET_PATH").as_deref(),
+            Some("/run/demo.sock")
+        );
+        assert_eq!(env_value(&envs, "NDN_INSECURE").as_deref(), Some("false"));
+        assert_eq!(env_value(&envs, "NDN_IP_FAMILY").as_deref(), Some("IPv6"));
+        assert_eq!(env_value(&envs, "NDN_TCP_PORT").as_deref(), Some("7000"));
+        assert_eq!(env_value(&envs, "NDN_WS_PORT").as_deref(), Some("7001"));
+        let trust = env_value(&envs, "NDN_TRUST_ANCHORS").expect("trust anchors env");
+        assert!(trust.contains("\"root\""));
+    }
+
+    #[test]
+    fn network_init_env_marks_insecure_without_issuer() {
+        let nw = build_network(false);
+        let envs = network_init_env(&nw, "/run/demo.sock");
+        assert_eq!(env_value(&envs, "NDN_INSECURE").as_deref(), Some("true"));
+        assert!(env_value(&envs, "NDN_TRUST_ANCHORS").is_some());
+    }
+}

@@ -416,3 +416,51 @@ pub fn is_router_initialized() -> impl Condition<Router> {
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kube::runtime::wait::Condition;
+
+    fn router_with_status(created: bool, initialized: bool, online: bool) -> Router {
+        let mut router = Router::new(
+            "demo",
+            RouterSpec {
+                prefix: "/demo/router".into(),
+                node_name: "node-a".into(),
+                cert: None,
+            },
+        );
+        router.status = created.then(|| RouterStatus {
+            initialized,
+            online,
+            inner_face: Some("udp://example".into()),
+            inner_neighbors: BTreeMap::new(),
+            outer_neighbors: BTreeMap::new(),
+            conditions: None,
+        });
+        router
+    }
+
+    #[test]
+    fn is_router_created_checks_presence() {
+        let cond = is_router_created();
+        assert!(cond.matches_object(Some(&router_with_status(true, true, true))));
+        assert!(cond.matches_object(Some(&router_with_status(false, false, false))));
+        assert!(!cond.matches_object(None));
+    }
+
+    #[test]
+    fn is_router_online_reflects_status() {
+        let cond = is_router_online();
+        assert!(cond.matches_object(Some(&router_with_status(true, true, true))));
+        assert!(!cond.matches_object(Some(&router_with_status(true, true, false))));
+    }
+
+    #[test]
+    fn is_router_initialized_reflects_status() {
+        let cond = is_router_initialized();
+        assert!(cond.matches_object(Some(&router_with_status(true, true, true))));
+        assert!(!cond.matches_object(Some(&router_with_status(true, false, true))));
+    }
+}

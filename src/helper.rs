@@ -55,3 +55,30 @@ pub fn decode_secret(secret: &Secret) -> BTreeMap<String, Decoded> {
     }
     res
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k8s_openapi::ByteString;
+
+    #[test]
+    fn decode_secret_distinguishes_utf8_and_binary() {
+        let secret = Secret {
+            data: Some(BTreeMap::from([
+                ("plain".into(), ByteString(b"hello".to_vec())),
+                ("bin".into(), ByteString(vec![0u8, 159u8])),
+            ])),
+            ..Secret::default()
+        };
+
+        let decoded = decode_secret(&secret);
+        match decoded.get("plain").unwrap() {
+            Decoded::Utf8(s) => assert_eq!(s, "hello"),
+            _ => panic!("expected utf8"),
+        }
+        match decoded.get("bin").unwrap() {
+            Decoded::Bytes(bytes) => assert_eq!(bytes, &vec![0u8, 159u8]),
+            _ => panic!("expected bytes"),
+        }
+    }
+}

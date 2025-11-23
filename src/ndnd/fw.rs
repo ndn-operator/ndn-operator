@@ -272,3 +272,29 @@ impl Default for HashtableConfig {
         Self { m: 5 }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn forwarder_config_default_sections_enabled() {
+        let cfg = ForwarderConfig::default();
+        assert!(cfg.core.is_some());
+        assert!(cfg.mgmt.is_some());
+        assert!(cfg.faces.tcp.is_some());
+        assert!(cfg.faces.udp.is_some());
+        assert_eq!(cfg.fw.queue_size, Some(1024));
+    }
+
+    #[test]
+    fn udp_and_websocket_defaults_match_expected_values() {
+        let faces = FacesConfig::default();
+        let udp = faces.udp.as_ref().unwrap();
+        assert_eq!(udp.port_unicast, Some(6363));
+        assert!(!udp.enabled_unicast);
+        let ws = faces.websocket.as_ref().unwrap();
+        assert_eq!(ws.port, 9696);
+        assert!(!ws.tls_enabled);
+    }
+}

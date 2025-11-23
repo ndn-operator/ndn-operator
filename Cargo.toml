@@ -2,6 +2,7 @@
 name = "ndn-operator"
 version = "0.4.0"
 edition = "2024"
+license = "Apache-2.0"
 
 [lib]
 name = "operator"
@@ -24,7 +25,7 @@ name = "injector"
 path = "src/bin/injector.rs"
 
 [dependencies]
-operator-derive = { path = "operator-derive" }
+operator-derive = { path = "operator-derive", version = "0.1.0" }
 actix-web = "4.12.0"
 anyhow = "1.0.100"
 duration-string = { version = "0.5.3", features = ["serde"] }

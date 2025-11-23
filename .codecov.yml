@@ -1,0 +1,18 @@
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+ignore:
+  - "src/bin/*"
+  - "src/main.rs"
+  - "src/events_helper.rs"
+  - "src/telemetry.rs"
+  - "src/helper.rs"
+  - "src/cert_controller/main.rs"
+  - "src/cert_controller/reconcile.rs"
+  - "src/cert_controller/crypto.rs"
+  - "src/network_controller/main.rs"
+  - "src/network_controller/neighbor_link.rs"
+  - "src/network_controller/pod_sync.rs"
+  - "src/network_controller/network.rs"
+  - "src/network_controller/router.rs"
