@@ -32,7 +32,7 @@ path = "src/bin/injector.rs"
 [dependencies]
 operator-derive = { path = "operator-derive", version = "0.1.0" }
 actix-web = "4.12.1"
-anyhow = "1.0.100"
+anyhow = "1.0.101"
 duration-string = { version = "0.5.3", features = ["serde"] }
 futures = "0.3.31"
 json-patch = "4.1.0"
