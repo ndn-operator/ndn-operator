@@ -78,7 +78,7 @@ jobs:
       uses: docker/setup-buildx-action@v3
     - name: Docker Meta
       id: meta
-      uses: docker/metadata-action@v5
+      uses: docker/metadata-action@v6
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         flavor: latest=false,suffix=-amd64
@@ -131,7 +131,7 @@ jobs:
       uses: docker/setup-buildx-action@v3
     - name: Docker Meta
       id: meta
-      uses: docker/metadata-action@v5
+      uses: docker/metadata-action@v6
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         flavor: latest=false,suffix=
@@ -172,7 +172,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     - name: Docker Meta
       id: meta
-      uses: docker/metadata-action@v5
+      uses: docker/metadata-action@v6
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
