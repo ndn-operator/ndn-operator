@@ -1,3 +1,5 @@
+use actix_web::{App, HttpResponse, HttpServer, web};
+use anyhow::{Context, anyhow};
 use json_patch::jsonptr::PointerBuf;
 use k8s_openapi::api::core::v1::{EnvVar, HostPathVolumeSource, Pod, Volume, VolumeMount};
 use kube::{
@@ -8,9 +10,8 @@ use kube::{
     },
 };
 use operator::{network_controller::Network, telemetry};
-use std::{convert::Infallible, env, error::Error};
+use std::{env, error::Error, fs::File, io::BufReader};
 use tracing::*;
-use warp::{Filter, Reply, reply};
 
 static ANNOTATION_NAME: &str = "networks.named-data.net/name";
 static ANNOTATION_NAMESPACE: &str = "networks.named-data.net/namespace";
@@ -28,28 +29,49 @@ async fn main() -> anyhow::Result<()> {
     let cert_path = env::var("NDN_INJECTOR_TLS_CERT_FILE").unwrap_or("tls.crt".to_string());
     let key_path = env::var("NDN_INJECTOR_TLS_KEY_FILE").unwrap_or("tls.key".to_string());
 
-    let routes = warp::path::end()
-        .and(warp::body::json())
-        .and_then(mutate_handler)
-        .with(warp::trace::request());
+    let tls_config = load_tls_config(&cert_path, &key_path)?;
+    info!("starting injector webhook on {listen_ip}:{listen_port}");
 
-    warp::serve(warp::post().and(routes))
-        .tls()
-        .cert_path(cert_path)
-        .key_path(key_path)
-        .run((listen_ip, listen_port))
-        .await;
+    HttpServer::new(|| App::new().route("/", web::post().to(mutate_handler)))
+        .bind_rustls_0_23((listen_ip, listen_port), tls_config)?
+        .run()
+        .await?;
+
     Ok(())
 }
 
-async fn mutate_handler(body: AdmissionReview<DynamicObject>) -> Result<impl Reply, Infallible> {
-    let req: AdmissionRequest<_> = match body.try_into() {
+fn load_tls_config(cert_path: &str, key_path: &str) -> anyhow::Result<rustls::ServerConfig> {
+    let cert_file = File::open(cert_path)
+        .with_context(|| format!("failed to open TLS certificate file `{cert_path}`"))?;
+    let key_file = File::open(key_path)
+        .with_context(|| format!("failed to open TLS private key file `{key_path}`"))?;
+
+    let cert_chain = rustls_pemfile::certs(&mut BufReader::new(cert_file))
+        .collect::<Result<Vec<_>, _>>()
+        .with_context(|| format!("failed to read TLS certificates from `{cert_path}`"))?;
+    if cert_chain.is_empty() {
+        return Err(anyhow!(
+            "TLS certificate file `{cert_path}` contains no certificates"
+        ));
+    }
+
+    let private_key = rustls_pemfile::private_key(&mut BufReader::new(key_file))
+        .with_context(|| format!("failed to read TLS private key from `{key_path}`"))?
+        .ok_or_else(|| anyhow!("TLS private key file `{key_path}` contains no private key"))?;
+
+    rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(cert_chain, private_key)
+        .with_context(|| format!("failed to build TLS config from `{cert_path}` and `{key_path}`"))
+}
+
+async fn mutate_handler(body: web::Json<AdmissionReview<DynamicObject>>) -> HttpResponse {
+    let req: AdmissionRequest<_> = match body.into_inner().try_into() {
         Ok(req) => req,
         Err(err) => {
             error!("invalid request: {}", err.to_string());
-            return Ok(reply::json(
-                &AdmissionResponse::invalid(err.to_string()).into_review(),
-            ));
+            return HttpResponse::Ok()
+                .json(AdmissionResponse::invalid(err.to_string()).into_review());
         }
     };
 
@@ -67,7 +89,7 @@ async fn mutate_handler(body: AdmissionReview<DynamicObject>) -> Result<impl Rep
                         (Some(name), None) => (name.clone(), pod.namespace().unwrap_or_default()),
                         _ => {
                             debug!("skipped: {:?} on {}", req.operation, obj_name);
-                            return Ok(reply::json(&res.into_review()));
+                            return HttpResponse::Ok().json(res.into_review());
                         }
                     };
                     res = match mutate(res.clone(), &pod, &network_name, &network_namespace).await {
@@ -92,7 +114,7 @@ async fn mutate_handler(body: AdmissionReview<DynamicObject>) -> Result<impl Rep
         }
     }
     // Wrap the AdmissionResponse wrapped in an AdmissionReview
-    Ok(reply::json(&res.into_review()))
+    HttpResponse::Ok().json(res.into_review())
 }
 
 async fn mutate(
