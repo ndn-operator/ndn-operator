@@ -10,7 +10,8 @@ use kube::{
     },
 };
 use operator::{network_controller::Network, telemetry};
-use std::{env, error::Error, fs::File, io::BufReader};
+use rustls_pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
+use std::{env, error::Error};
 use tracing::*;
 
 static ANNOTATION_NAME: &str = "networks.named-data.net/name";
@@ -41,12 +42,8 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn load_tls_config(cert_path: &str, key_path: &str) -> anyhow::Result<rustls::ServerConfig> {
-    let cert_file = File::open(cert_path)
-        .with_context(|| format!("failed to open TLS certificate file `{cert_path}`"))?;
-    let key_file = File::open(key_path)
-        .with_context(|| format!("failed to open TLS private key file `{key_path}`"))?;
-
-    let cert_chain = rustls_pemfile::certs(&mut BufReader::new(cert_file))
+    let cert_chain = CertificateDer::pem_file_iter(cert_path)
+        .with_context(|| format!("failed to open TLS certificate file `{cert_path}`"))?
         .collect::<Result<Vec<_>, _>>()
         .with_context(|| format!("failed to read TLS certificates from `{cert_path}`"))?;
     if cert_chain.is_empty() {
@@ -55,9 +52,8 @@ fn load_tls_config(cert_path: &str, key_path: &str) -> anyhow::Result<rustls::Se
         ));
     }
 
-    let private_key = rustls_pemfile::private_key(&mut BufReader::new(key_file))
-        .with_context(|| format!("failed to read TLS private key from `{key_path}`"))?
-        .ok_or_else(|| anyhow!("TLS private key file `{key_path}` contains no private key"))?;
+    let private_key = PrivateKeyDer::from_pem_file(key_path)
+        .with_context(|| format!("failed to read TLS private key from `{key_path}`"))?;
 
     rustls::ServerConfig::builder()
         .with_no_client_auth()
