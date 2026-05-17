@@ -40,8 +40,8 @@ pub trait Conditions {
         message: &str,
         observed_generation: i64,
     ) -> K8sCondition {
-        use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
-        let now = Time(chrono::Utc::now());
+        use k8s_openapi::{apimachinery::pkg::apis::meta::v1::Time, jiff::Timestamp};
+        let now = Time(Timestamp::now());
         K8sCondition {
             type_: type_.to_string(),
             status: if status {
@@ -85,7 +85,7 @@ pub trait Conditions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
+    use k8s_openapi::jiff::Timestamp;
 
     #[derive(Default)]
     struct DummyConditions {
@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn upsert_condition_preserves_transition_time_on_same_status() {
         let mut dummy = DummyConditions::default();
-        let original_time = k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(Utc::now());
+        let original_time = k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(Timestamp::now());
         dummy.conds = Some(vec![K8sCondition {
             type_: "Ready".into(),
             status: "True".into(),
@@ -132,7 +132,9 @@ mod tests {
             reason: "Updated".into(),
             message: "Updated".into(),
             observed_generation: Some(2),
-            last_transition_time: k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(Utc::now()),
+            last_transition_time: k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(
+                Timestamp::now(),
+            ),
         };
         dummy.upsert_condition(updated);
 
