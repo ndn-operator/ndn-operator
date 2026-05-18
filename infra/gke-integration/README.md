@@ -23,6 +23,7 @@ Optional repository variables:
 
 - `GKE_INTEGRATION_REGION`: defaults to `us-west1`.
 - `GKE_INTEGRATION_LOCATION`: defaults to `us-west1-a`.
+- `GKE_INTEGRATION_MACHINE_TYPE`: defaults to `n4a-standard-2`.
 
 The direct WIF principal needs enough access to create and delete the test
 cluster and its network. A practical starting point is:
