@@ -16,7 +16,7 @@ helm repo update
 helm install ndn-operator ndn-operator/ndn-operator \
     --namespace ndn-operator --create-namespace
 ```
-## Create secured ndn network
+## Create a secured NDN network
 
 ### Namespace
 ```shell
@@ -33,7 +33,7 @@ kubectl apply --namespace mynetwork \
     -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/secure/network.yaml
 ```
 ### Pingserver
-Producers and consumers may live in different k8s namespaces from the network, and from each other
+Producers and consumers may live in different Kubernetes namespaces from the network, and from each other.
 * Producer:
 ```shell
 kubectl apply \
