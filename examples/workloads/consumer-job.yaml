@@ -13,6 +13,11 @@ spec:
         named-data.net/inject: "true"
     spec:
       restartPolicy: Never
+      tolerations:
+      - key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+        effect: NoSchedule
       containers:
       - name: ping
         image: ghcr.io/named-data/ndnd:latest

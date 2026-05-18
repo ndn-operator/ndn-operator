@@ -11,7 +11,6 @@ NETWORK_NAMESPACE="${NETWORK_NAMESPACE:-mynetwork}"
 WORKLOAD_NAMESPACE="${WORKLOAD_NAMESPACE:-ndn-workloads}"
 NETWORK_NAME="${NETWORK_NAME:-test}"
 ARM_TOLERATION='[{"key":"kubernetes.io/arch","operator":"Equal","value":"arm64","effect":"NoSchedule"}]'
-ARM_POD_TOLERATION_PATCH="{\"spec\":{\"tolerations\":${ARM_TOLERATION}}}"
 
 if [[ "${OPERATOR_IMAGE}" != *:* ]]; then
   echo "OPERATOR_IMAGE must include a tag: ${OPERATOR_IMAGE}" >&2
@@ -42,7 +41,7 @@ echo "Applying secured NDN network example"
 kubectl -n "${NETWORK_NAMESPACE}" apply -f "${ROOT_DIR}/examples/secure/self-signed-cert.yaml"
 kubectl -n "${NETWORK_NAMESPACE}" apply -f "${ROOT_DIR}/examples/secure/network.yaml"
 kubectl -n "${NETWORK_NAMESPACE}" patch network "${NETWORK_NAME}" --type merge \
-  --patch "{\"spec\":{\"ipFamily\":\"IPv6\",\"operator\":{\"image\":\"${OPERATOR_IMAGE}\"},\"template\":{\"tolerations\":${ARM_TOLERATION}}}}"
+  --patch "{\"spec\":{\"ipFamily\":\"IPv6\",\"operator\":{\"image\":\"${OPERATOR_IMAGE}\"}}}"
 
 kubectl -n "${NETWORK_NAMESPACE}" wait --for=condition=Ready "certificate/self-signed" --timeout=5m
 kubectl -n "${NETWORK_NAMESPACE}" wait --for=condition=Ready "network/${NETWORK_NAME}" --timeout=5m
@@ -63,19 +62,9 @@ cat /tmp/ndn-router-faces.txt
 
 echo "Applying injected workload examples"
 kubectl -n "${WORKLOAD_NAMESPACE}" apply -f "${ROOT_DIR}/examples/workloads/producer-pod.yaml"
-kubectl -n "${WORKLOAD_NAMESPACE}" patch pod/test-pingserver --type merge \
-  --patch "${ARM_POD_TOLERATION_PATCH}"
 kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Ready pod/test-pingserver --timeout=5m
 
 kubectl -n "${WORKLOAD_NAMESPACE}" apply -f "${ROOT_DIR}/examples/workloads/consumer-job.yaml"
-timeout 2m bash -c '
-  set -euo pipefail
-  until kubectl -n "$0" get pods -l job-name=test-ping -o name | grep -q .; do
-    sleep 1
-  done
-' "${WORKLOAD_NAMESPACE}"
-kubectl -n "${WORKLOAD_NAMESPACE}" patch pods -l job-name=test-ping --type merge \
-  --patch "${ARM_POD_TOLERATION_PATCH}"
 kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Complete job/test-ping --timeout=6m
 
 kubectl -n "${WORKLOAD_NAMESPACE}" logs job/test-ping

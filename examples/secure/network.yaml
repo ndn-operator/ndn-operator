@@ -10,6 +10,12 @@ spec:
     image: ghcr.io/named-data/ndnd:1.5.2
   operator:
     image: ghcr.io/ndn-operator/ndn-operator:latest
+  template:
+    tolerations:
+    - key: kubernetes.io/arch
+      operator: Equal
+      value: arm64
+      effect: NoSchedule
   routerCertIssuer:
     kind: Certificate
     name: self-signed
