@@ -210,7 +210,7 @@ jobs:
     environment: gke-integration
     concurrency:
       group: gke-integration-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -221,6 +221,7 @@ jobs:
       TF_VAR_project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
       TF_VAR_region: ${{ vars.GKE_INTEGRATION_REGION || 'us-west1' }}
       TF_VAR_location: ${{ vars.GKE_INTEGRATION_LOCATION || 'us-west1-a' }}
+      TF_VAR_machine_type: ${{ vars.GKE_INTEGRATION_MACHINE_TYPE || 'n4a-standard-2' }}
       TF_VAR_name: ndn-it-${{ github.event.pull_request.number }}-${{ github.run_id }}
       TF_VAR_pr_number: ${{ github.event.pull_request.number }}
       TF_VAR_run_id: ${{ github.run_id }}
@@ -299,6 +300,19 @@ jobs:
         OPERATOR_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}
         REPO_UNDER_TEST_DIR: ${{ github.workspace }}/under-test
       run: trusted/hack/integration/run-gke-tests.sh
+    - name: Refresh Google Cloud auth before artifacts
+      if: always() && steps.credentials.outcome == 'success'
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
+        workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+    - name: Refresh GKE credentials before artifacts
+      if: always() && steps.credentials.outcome == 'success'
+      uses: google-github-actions/get-gke-credentials@v3
+      with:
+        project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
+        cluster_name: ${{ steps.tofu-output.outputs.cluster_name }}
+        location: ${{ steps.tofu-output.outputs.cluster_location }}
     - name: Collect cluster artifacts
       if: always() && steps.credentials.outcome == 'success'
       env:
