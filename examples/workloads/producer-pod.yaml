@@ -8,6 +8,11 @@ metadata:
   labels:
     named-data.net/inject: "true"
 spec:
+  tolerations:
+  - key: kubernetes.io/arch
+    operator: Equal
+    value: arm64
+    effect: NoSchedule
   containers:
   - name: server
     image: ghcr.io/named-data/ndnd:latest

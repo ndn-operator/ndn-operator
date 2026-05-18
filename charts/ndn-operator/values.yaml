@@ -3,6 +3,8 @@ image:
   tag: 0.5.0
   pullPolicy: IfNotPresent
 
+tolerations: []
+
 controllers:
   network:
     logLevel: info

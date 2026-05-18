@@ -7,6 +7,7 @@ fn default_ndnd_image() {
         udp_unicast_port: 6363,
         ip_family: IpFamily::IPv4,
         node_selector: None,
+        template: None,
         ndnd: NdndSpec::default(),
         operator: None,
         router_cert_issuer: None,

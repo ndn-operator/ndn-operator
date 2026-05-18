@@ -10,6 +10,7 @@ OPERATOR_NAMESPACE="${OPERATOR_NAMESPACE:-ndn-operator}"
 NETWORK_NAMESPACE="${NETWORK_NAMESPACE:-mynetwork}"
 WORKLOAD_NAMESPACE="${WORKLOAD_NAMESPACE:-ndn-workloads}"
 NETWORK_NAME="${NETWORK_NAME:-test}"
+ARM_TOLERATION='[{"key":"kubernetes.io/arch","operator":"Equal","value":"arm64","effect":"NoSchedule"}]'
 
 if [[ "${OPERATOR_IMAGE}" != *:* ]]; then
   echo "OPERATOR_IMAGE must include a tag: ${OPERATOR_IMAGE}" >&2
@@ -26,6 +27,7 @@ helm upgrade --install ndn-operator "${ROOT_DIR}/charts/ndn-operator" \
   --set "image.repository=${IMAGE_REPOSITORY}" \
   --set "image.tag=${IMAGE_TAG}" \
   --set "image.pullPolicy=Always" \
+  --set-json "tolerations=${ARM_TOLERATION}" \
   --wait \
   --timeout 5m
 

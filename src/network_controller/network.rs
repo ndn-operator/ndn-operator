@@ -15,7 +15,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use k8s_openapi::{
     api::{
         apps::v1::DaemonSet,
-        core::v1::{Service, ServiceAccount},
+        core::v1::{Affinity, Service, ServiceAccount, Toleration},
         rbac::v1::{PolicyRule, Role, RoleBinding, RoleRef, Subject},
     },
     apimachinery::pkg::apis::meta::v1::ObjectMeta,
@@ -79,8 +79,10 @@ pub struct NetworkSpec {
     #[serde(default = "default_ip_family")]
     #[schemars(default = "default_ip_family")]
     pub ip_family: IpFamily,
-    /// The node selector for the network, used to schedule the network controller on specific nodes
+    /// Node selector for router DaemonSet pods. Prefer spec.template.nodeSelector for new configs.
     pub node_selector: Option<BTreeMap<String, String>>,
+    /// Pod template settings for the router DaemonSet managed by this network
+    pub template: Option<NetworkTemplateSpec>,
     /// The NDND image to use for the network controller
     #[serde(default = "NdndSpec::default")]
     pub ndnd: NdndSpec,
@@ -94,6 +96,18 @@ pub struct NetworkSpec {
     pub trust_anchors: Option<Vec<TrustAnchorRef>>,
     /// Public faces to expose from router pods
     pub faces: Option<FacesSpec>,
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkTemplateSpec {
+    /// Node selector for router DaemonSet pods. Overrides matching keys from spec.nodeSelector.
+    pub node_selector: Option<BTreeMap<String, String>>,
+    /// Tolerations for router DaemonSet pods.
+    pub tolerations: Option<Vec<Toleration>>,
+    /// Affinity for router DaemonSet pods.
+    pub affinity: Option<Affinity>,
 }
 
 #[skip_serializing_none]
@@ -759,6 +773,7 @@ mod tests {
             udp_unicast_port: 6363,
             ip_family: IpFamily::IPv4,
             node_selector: None,
+            template: None,
             ndnd: NdndSpec::default(),
             operator: Some(OperatorSpec::default()),
             router_cert_issuer: Some(IssuerRef {

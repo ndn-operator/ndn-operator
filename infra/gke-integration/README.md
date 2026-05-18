@@ -4,7 +4,8 @@ This OpenTofu module creates one ephemeral private-node, dual-stack GKE cluster
 for PR integration tests. The cluster keeps the control plane public, but limits
 access with master authorized networks to the current GitHub runner IP.
 
-The workflow runs when a pull request has the `run-gke-integration` label.
+The workflow runs when a trusted pull request has the `run-gke-integration`
+label.
 
 The GitHub workflow uses direct Workload Identity Federation.
 
