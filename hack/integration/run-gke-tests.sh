@@ -12,7 +12,6 @@ WORKLOAD_NAMESPACE="${WORKLOAD_NAMESPACE:-ndn-workloads}"
 NETWORK_NAME="${NETWORK_NAME:-test}"
 ARM_TOLERATION='[{"key":"kubernetes.io/arch","operator":"Equal","value":"arm64","effect":"NoSchedule"}]'
 ARM_POD_TOLERATION_PATCH="{\"spec\":{\"tolerations\":${ARM_TOLERATION}}}"
-ARM_TEMPLATE_TOLERATION_PATCH="{\"spec\":{\"template\":{\"spec\":{\"tolerations\":${ARM_TOLERATION}}}}}"
 
 if [[ "${OPERATOR_IMAGE}" != *:* ]]; then
   echo "OPERATOR_IMAGE must include a tag: ${OPERATOR_IMAGE}" >&2
@@ -43,12 +42,10 @@ echo "Applying secured NDN network example"
 kubectl -n "${NETWORK_NAMESPACE}" apply -f "${ROOT_DIR}/examples/secure/self-signed-cert.yaml"
 kubectl -n "${NETWORK_NAMESPACE}" apply -f "${ROOT_DIR}/examples/secure/network.yaml"
 kubectl -n "${NETWORK_NAMESPACE}" patch network "${NETWORK_NAME}" --type merge \
-  --patch "{\"spec\":{\"ipFamily\":\"IPv6\",\"operator\":{\"image\":\"${OPERATOR_IMAGE}\"}}}"
+  --patch "{\"spec\":{\"ipFamily\":\"IPv6\",\"operator\":{\"image\":\"${OPERATOR_IMAGE}\"},\"template\":{\"tolerations\":${ARM_TOLERATION}}}}"
 
 kubectl -n "${NETWORK_NAMESPACE}" wait --for=condition=Ready "certificate/self-signed" --timeout=5m
 kubectl -n "${NETWORK_NAMESPACE}" wait --for=condition=Ready "network/${NETWORK_NAME}" --timeout=5m
-kubectl -n "${NETWORK_NAMESPACE}" patch daemonset "${NETWORK_NAME}" --type merge \
-  --patch "${ARM_TEMPLATE_TOLERATION_PATCH}"
 kubectl -n "${NETWORK_NAMESPACE}" rollout status "daemonset/${NETWORK_NAME}" --timeout=8m
 
 echo "Waiting for routers to publish IPv6 inner faces"

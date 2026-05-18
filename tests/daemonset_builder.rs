@@ -9,6 +9,7 @@ fn test_network_spec() -> NetworkSpec {
         udp_unicast_port: 6363,
         ip_family: IpFamily::IPv4,
         node_selector: None,
+        template: None,
         ndnd: NdndSpec::default(),
         operator: Some(OperatorSpec {
             image: "test/operator:latest".into(),

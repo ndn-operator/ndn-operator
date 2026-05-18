@@ -28,6 +28,7 @@ pub fn create_owned_daemonset(
     labels.insert(DS_LABEL_KEY.to_string(), nw.name_any());
     let container_config_path = nw.container_config_path();
     let container_socket_path = nw.container_socket_path();
+    let template = nw.spec.template.as_ref();
     Ok(DaemonSet {
         metadata: ObjectMeta {
             name: Some(nw.name_any()),
@@ -49,7 +50,9 @@ pub fn create_owned_daemonset(
                     service_account_name: service_account,
                     host_network: Some(true),
                     dns_policy: Some("ClusterFirstWithHostNet".to_string()),
-                    node_selector: nw.spec.node_selector.clone(),
+                    node_selector: network_node_selector(nw),
+                    tolerations: template.and_then(|t| t.tolerations.clone()),
+                    affinity: template.and_then(|t| t.affinity.clone()),
                     init_containers: Some(vec![Container {
                         name: "init".to_string(),
                         image: image.clone(),
@@ -235,6 +238,19 @@ pub fn create_owned_daemonset(
     })
 }
 
+fn network_node_selector(nw: &Network) -> Option<BTreeMap<String, String>> {
+    let mut selector = nw.spec.node_selector.clone().unwrap_or_default();
+    if let Some(template_selector) = nw
+        .spec
+        .template
+        .as_ref()
+        .and_then(|template| template.node_selector.as_ref())
+    {
+        selector.extend(template_selector.clone());
+    }
+    (!selector.is_empty()).then_some(selector)
+}
+
 fn network_init_env(nw: &Network, container_socket_path: &str) -> Vec<EnvVar> {
     let mut envs = vec![
         EnvVar {
@@ -350,9 +366,10 @@ mod tests {
     use super::*;
     use crate::cert_controller::IssuerRef;
     use crate::network_controller::{
-        FacesSpec, IpFamily, NdndSpec, NetworkSpec, NetworkTcpFaceSpec, NetworkWebSocketFaceSpec,
-        OperatorSpec, TrustAnchorRef,
+        FacesSpec, IpFamily, NdndSpec, NetworkSpec, NetworkTcpFaceSpec, NetworkTemplateSpec,
+        NetworkWebSocketFaceSpec, OperatorSpec, TrustAnchorRef,
     };
+    use k8s_openapi::api::core::v1::Toleration;
 
     fn build_network(with_issuer: bool) -> Network {
         let spec = NetworkSpec {
@@ -360,6 +377,7 @@ mod tests {
             udp_unicast_port: 6363,
             ip_family: IpFamily::IPv6,
             node_selector: None,
+            template: None,
             ndnd: NdndSpec {
                 image: "ndnd:test".into(),
             },
@@ -430,5 +448,46 @@ mod tests {
         let envs = network_init_env(&nw, "/run/demo.sock");
         assert_eq!(env_value(&envs, "NDN_INSECURE").as_deref(), Some("true"));
         assert!(env_value(&envs, "NDN_TRUST_ANCHORS").is_some());
+    }
+
+    #[test]
+    fn daemonset_applies_network_template_scheduling() {
+        let mut nw = build_network(false);
+        let mut node_selector = BTreeMap::new();
+        node_selector.insert("disk".to_string(), "ssd".to_string());
+        node_selector.insert("kubernetes.io/arch".to_string(), "amd64".to_string());
+        let mut template_node_selector = BTreeMap::new();
+        template_node_selector.insert("kubernetes.io/arch".to_string(), "arm64".to_string());
+        template_node_selector.insert("pool".to_string(), "integration".to_string());
+        nw.spec.node_selector = Some(node_selector);
+        nw.spec.template = Some(NetworkTemplateSpec {
+            node_selector: Some(template_node_selector),
+            tolerations: Some(vec![Toleration {
+                key: Some("kubernetes.io/arch".to_string()),
+                operator: Some("Equal".to_string()),
+                value: Some("arm64".to_string()),
+                effect: Some("NoSchedule".to_string()),
+                ..Toleration::default()
+            }]),
+            affinity: Some(Default::default()),
+        });
+
+        let ds = create_owned_daemonset(&nw, Some("op:test".into()), Some("ndn".into())).unwrap();
+        let pod_spec = ds.spec.unwrap().template.spec.unwrap();
+        let node_selector = pod_spec.node_selector.unwrap();
+        assert_eq!(node_selector.get("disk").map(String::as_str), Some("ssd"));
+        assert_eq!(
+            node_selector.get("kubernetes.io/arch").map(String::as_str),
+            Some("arm64")
+        );
+        assert_eq!(
+            node_selector.get("pool").map(String::as_str),
+            Some("integration")
+        );
+        let toleration = pod_spec.tolerations.unwrap().into_iter().next().unwrap();
+        assert_eq!(toleration.key.as_deref(), Some("kubernetes.io/arch"));
+        assert_eq!(toleration.value.as_deref(), Some("arm64"));
+        assert_eq!(toleration.effect.as_deref(), Some("NoSchedule"));
+        assert!(pod_spec.affinity.is_some());
     }
 }
