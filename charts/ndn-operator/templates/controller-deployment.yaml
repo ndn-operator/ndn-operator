@@ -21,6 +21,10 @@ spec:
         chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
       serviceAccountName: ndn-controller
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: network-controller
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

@@ -10,6 +10,9 @@ OPERATOR_NAMESPACE="${OPERATOR_NAMESPACE:-ndn-operator}"
 NETWORK_NAMESPACE="${NETWORK_NAMESPACE:-mynetwork}"
 WORKLOAD_NAMESPACE="${WORKLOAD_NAMESPACE:-ndn-workloads}"
 NETWORK_NAME="${NETWORK_NAME:-test}"
+ARM_TOLERATION='[{"key":"kubernetes.io/arch","operator":"Equal","value":"arm64","effect":"NoSchedule"}]'
+ARM_POD_TOLERATION_PATCH="{\"spec\":{\"tolerations\":${ARM_TOLERATION}}}"
+ARM_TEMPLATE_TOLERATION_PATCH="{\"spec\":{\"template\":{\"spec\":{\"tolerations\":${ARM_TOLERATION}}}}}"
 
 if [[ "${OPERATOR_IMAGE}" != *:* ]]; then
   echo "OPERATOR_IMAGE must include a tag: ${OPERATOR_IMAGE}" >&2
@@ -26,6 +29,7 @@ helm upgrade --install ndn-operator "${ROOT_DIR}/charts/ndn-operator" \
   --set "image.repository=${IMAGE_REPOSITORY}" \
   --set "image.tag=${IMAGE_TAG}" \
   --set "image.pullPolicy=Always" \
+  --set-json "tolerations=${ARM_TOLERATION}" \
   --wait \
   --timeout 5m
 
@@ -43,6 +47,8 @@ kubectl -n "${NETWORK_NAMESPACE}" patch network "${NETWORK_NAME}" --type merge \
 
 kubectl -n "${NETWORK_NAMESPACE}" wait --for=condition=Ready "certificate/self-signed" --timeout=5m
 kubectl -n "${NETWORK_NAMESPACE}" wait --for=condition=Ready "network/${NETWORK_NAME}" --timeout=5m
+kubectl -n "${NETWORK_NAMESPACE}" patch daemonset "${NETWORK_NAME}" --type merge \
+  --patch "${ARM_TEMPLATE_TOLERATION_PATCH}"
 kubectl -n "${NETWORK_NAMESPACE}" rollout status "daemonset/${NETWORK_NAME}" --timeout=8m
 
 echo "Waiting for routers to publish IPv6 inner faces"
@@ -60,9 +66,19 @@ cat /tmp/ndn-router-faces.txt
 
 echo "Applying injected workload examples"
 kubectl -n "${WORKLOAD_NAMESPACE}" apply -f "${ROOT_DIR}/examples/workloads/producer-pod.yaml"
+kubectl -n "${WORKLOAD_NAMESPACE}" patch pod/test-pingserver --type merge \
+  --patch "${ARM_POD_TOLERATION_PATCH}"
 kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Ready pod/test-pingserver --timeout=5m
 
 kubectl -n "${WORKLOAD_NAMESPACE}" apply -f "${ROOT_DIR}/examples/workloads/consumer-job.yaml"
+timeout 2m bash -c '
+  set -euo pipefail
+  until kubectl -n "$0" get pods -l job-name=test-ping -o name | grep -q .; do
+    sleep 1
+  done
+' "${WORKLOAD_NAMESPACE}"
+kubectl -n "${WORKLOAD_NAMESPACE}" patch pods -l job-name=test-ping --type merge \
+  --patch "${ARM_POD_TOLERATION_PATCH}"
 kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Complete job/test-ping --timeout=6m
 
 kubectl -n "${WORKLOAD_NAMESPACE}" logs job/test-ping
