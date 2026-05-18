@@ -19,6 +19,7 @@ fi
 
 IMAGE_REPOSITORY="${OPERATOR_IMAGE%:*}"
 IMAGE_TAG="${OPERATOR_IMAGE##*:}"
+LOW_CPU_REQUEST=25m
 
 echo "Installing ndn-operator from ${OPERATOR_IMAGE}"
 helm upgrade --install ndn-operator "${ROOT_DIR}/charts/ndn-operator" \
@@ -27,6 +28,13 @@ helm upgrade --install ndn-operator "${ROOT_DIR}/charts/ndn-operator" \
   --set "image.repository=${IMAGE_REPOSITORY}" \
   --set "image.tag=${IMAGE_TAG}" \
   --set "image.pullPolicy=Always" \
+  --set "controllers.network.resources.requests.cpu=${LOW_CPU_REQUEST}" \
+  --set "controllers.router.resources.requests.cpu=${LOW_CPU_REQUEST}" \
+  --set "controllers.neighbor.resources.requests.cpu=${LOW_CPU_REQUEST}" \
+  --set "controllers.pod.resources.requests.cpu=${LOW_CPU_REQUEST}" \
+  --set "controllers.certificate.resources.requests.cpu=${LOW_CPU_REQUEST}" \
+  --set "controllers.externalCertificate.resources.requests.cpu=${LOW_CPU_REQUEST}" \
+  --set "injector.resources.requests.cpu=${LOW_CPU_REQUEST}" \
   --set-json "tolerations=${ARM_TOLERATION}" \
   --wait \
   --timeout 5m
