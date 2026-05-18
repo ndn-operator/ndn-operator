@@ -1,1 +1,6 @@
 /target
+**/.terraform/
+*.tfplan
+*.terraform*
+*.tfstate
+*.tfstate.*

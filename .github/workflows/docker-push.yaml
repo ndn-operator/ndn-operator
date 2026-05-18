@@ -6,6 +6,12 @@ on:
     paths-ignore:
     - README.md
   pull_request:
+    types:
+    - opened
+    - synchronize
+    - reopened
+    - ready_for_review
+    - labeled
     branches:
     - main
     - release/*
@@ -196,3 +202,124 @@ jobs:
         subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
         subject-digest: ${{ steps.manifest.outputs.digest }}
         push-to-registry: true
+  gke-integration:
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'run-gke-integration')
+    needs:
+    - build
+    runs-on: ubuntu-24.04
+    environment: gke-integration
+    concurrency:
+      group: gke-integration-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+      pull-requests: read
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
+      TF_VAR_region: ${{ vars.GKE_INTEGRATION_REGION || 'us-west1' }}
+      TF_VAR_location: ${{ vars.GKE_INTEGRATION_LOCATION || 'us-west1-a' }}
+      TF_VAR_name: ndn-it-${{ github.event.pull_request.number }}-${{ github.run_id }}
+      TF_VAR_pr_number: ${{ github.event.pull_request.number }}
+      TF_VAR_run_id: ${{ github.run_id }}
+      TF_VAR_commit_sha: ${{ github.event.pull_request.head.sha }}
+    steps:
+    - name: Checkout trusted integration harness
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event.pull_request.base.sha }}
+        path: trusted
+    - name: Checkout PR sources under test
+      uses: actions/checkout@v6
+      with:
+        repository: ${{ github.event.pull_request.head.repo.full_name }}
+        ref: ${{ github.event.pull_request.head.sha }}
+        path: under-test
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
+        workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+    - name: Set up gcloud
+      uses: google-github-actions/setup-gcloud@v3
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v4
+    - name: Set up Helm
+      uses: azure/setup-helm@v4
+    - name: Set up OpenTofu
+      uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_wrapper: false
+    - name: Detect runner public IP
+      id: runner-ip
+      run: |
+        runner_ip="$(curl -fsSL https://api.ipify.org)"
+        echo "cidr=${runner_ip}/32" >> "$GITHUB_OUTPUT"
+        echo "Authorized control-plane CIDR: ${runner_ip}/32"
+    - name: OpenTofu init
+      id: tofu-init
+      working-directory: trusted/infra/gke-integration
+      run: |
+        tofu init -input=false \
+          -backend-config="bucket=${{ vars.GKE_INTEGRATION_STATE_BUCKET }}" \
+          -backend-config="prefix=ndn-operator/gke-integration/pr-${{ github.event.pull_request.number }}/run-${{ github.run_id }}"
+    - name: OpenTofu validate
+      working-directory: trusted/infra/gke-integration
+      env:
+        TF_VAR_authorized_cidr: ${{ steps.runner-ip.outputs.cidr }}
+      run: tofu validate -no-color
+    - name: OpenTofu apply
+      id: tofu-apply
+      working-directory: trusted/infra/gke-integration
+      env:
+        TF_VAR_authorized_cidr: ${{ steps.runner-ip.outputs.cidr }}
+      run: tofu apply -auto-approve -input=false -no-color
+    - name: Refresh Google Cloud auth
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
+        workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+    - name: Read cluster outputs
+      id: tofu-output
+      working-directory: trusted/infra/gke-integration
+      run: |
+        echo "cluster_name=$(tofu output -raw cluster_name)" >> "$GITHUB_OUTPUT"
+        echo "cluster_location=$(tofu output -raw cluster_location)" >> "$GITHUB_OUTPUT"
+    - name: Get GKE credentials
+      id: credentials
+      uses: google-github-actions/get-gke-credentials@v3
+      with:
+        project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
+        cluster_name: ${{ steps.tofu-output.outputs.cluster_name }}
+        location: ${{ steps.tofu-output.outputs.cluster_location }}
+    - name: Run NDN integration tests
+      env:
+        OPERATOR_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}
+        REPO_UNDER_TEST_DIR: ${{ github.workspace }}/under-test
+      run: trusted/hack/integration/run-gke-tests.sh
+    - name: Collect cluster artifacts
+      if: always() && steps.credentials.outcome == 'success'
+      env:
+        ARTIFACT_DIR: artifacts/gke-integration
+      run: trusted/hack/integration/collect-artifacts.sh
+    - name: Upload cluster artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: gke-integration-${{ github.event.pull_request.number }}-${{ github.run_id }}
+        path: artifacts/gke-integration
+        if-no-files-found: ignore
+    - name: Refresh Google Cloud auth before destroy
+      if: always() && steps.tofu-init.outcome == 'success'
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
+        workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+    - name: OpenTofu destroy
+      if: always() && steps.tofu-init.outcome == 'success'
+      working-directory: trusted/infra/gke-integration
+      env:
+        TF_VAR_authorized_cidr: ${{ steps.runner-ip.outputs.cidr }}
+      run: tofu destroy -auto-approve -input=false -no-color
