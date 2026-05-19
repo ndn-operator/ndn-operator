@@ -320,7 +320,7 @@ jobs:
       run: trusted/hack/integration/collect-artifacts.sh
     - name: Upload cluster artifacts
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: gke-integration-${{ github.event.pull_request.number }}-${{ github.run_id }}
         path: artifacts/gke-integration
