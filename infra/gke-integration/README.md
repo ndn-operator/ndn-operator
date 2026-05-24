@@ -1,8 +1,14 @@
 # GKE integration test infrastructure
 
-This OpenTofu module creates one ephemeral private-node, dual-stack GKE cluster
-for PR integration tests. The cluster keeps the control plane public, but limits
-access with master authorized networks to the current GitHub runner IP.
+This OpenTofu module creates two ephemeral private-node GKE clusters for PR
+integration tests. The primary cluster is dual-stack in `us-west1-a`; an
+isolated IPv4 peer cluster defaults to `us-south1-a` in its own VPC. Both
+clusters keep the control plane public, but limit access with master authorized
+networks to the current GitHub runner IP.
+
+The data-path test exposes a WebSocket face through a public LoadBalancer in the
+primary cluster. The peer cluster reaches that endpoint over its own Cloud NAT,
+so there is no VPC peering or private cross-region connectivity.
 
 The workflow runs when a trusted pull request has the `run-gke-integration`
 label.
@@ -24,6 +30,9 @@ Optional repository variables:
 - `GKE_INTEGRATION_REGION`: defaults to `us-west1`.
 - `GKE_INTEGRATION_LOCATION`: defaults to `us-west1-a`.
 - `GKE_INTEGRATION_MACHINE_TYPE`: defaults to `n4a-standard-2`.
+- `GKE_INTEGRATION_PEER_REGION`: defaults to `us-south1`.
+- `GKE_INTEGRATION_PEER_LOCATION`: defaults to `us-south1-a`.
+- `GKE_INTEGRATION_PEER_MACHINE_TYPE`: defaults to `e2-standard-2`.
 
 The direct WIF principal needs enough access to create and delete the test
 cluster and its network. A practical starting point is:

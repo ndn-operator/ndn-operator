@@ -4,5 +4,5 @@ metadata:
   name: to-test1
   namespace: mynetwork
 spec:
-  network: test1
-  uri: tcp://<address>:6364
+  network: test2
+  uri: "ws://<address>:9696"

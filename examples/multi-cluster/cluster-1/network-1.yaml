@@ -11,16 +11,16 @@ spec:
   operator:
     image: ghcr.io/ndn-operator/ndn-operator:latest
   routerCertIssuer:
-    kind: ExternalCertificate
-    name: test1-cert
+    kind: Certificate
+    name: test1-root
   trustAnchors:
-  - name: test1-cert
-    kind: ExternalCertificate
-  - name: test2-cert
+  - name: test1-root
+    kind: Certificate
+  - name: test2-root
     kind: ExternalCertificate
   faces:
-    tcp:
-      port: 6364
+    websocket:
+      port: 9696
       serviceTemplate:
         spec:
           type: LoadBalancer

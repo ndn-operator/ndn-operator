@@ -1,0 +1,11 @@
+apiVersion: named-data.net/v1alpha1
+kind: Certificate
+metadata:
+  name: peer-root
+spec:
+  prefix: /peer
+  issuer:
+    name: peer-root
+    kind: Certificate
+  renewBefore: 23h50m
+  renewInterval: 4d15h
