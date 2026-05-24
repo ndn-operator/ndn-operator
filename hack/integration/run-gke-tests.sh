@@ -105,16 +105,89 @@ assert_ping_received_data() {
 wait_for_network_rollout() {
   local kubeconfig="$1"
   local network_name="$2"
+  local deadline=$((SECONDS + 300))
+  local image
 
-  timeout 5m bash -c '
-    set -euo pipefail
-    until [[ "$(kubectl --kubeconfig "$0" -n "$1" get daemonset "$2" \
-        -o jsonpath="{.spec.template.spec.initContainers[0].image}" 2>/dev/null)" == "$3" ]]; do
-      sleep 5
-    done
-  ' "${kubeconfig}" "${NETWORK_NAMESPACE}" "${network_name}" "${OPERATOR_IMAGE}"
+  while true; do
+    image="$(kubectl --kubeconfig "${kubeconfig}" -n "${NETWORK_NAMESPACE}" \
+      get daemonset "${network_name}" \
+      -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
+    if [[ "${image}" == "${OPERATOR_IMAGE}" ]]; then
+      break
+    fi
+    if (( SECONDS >= deadline )); then
+      echo "Timed out waiting for daemonset/${network_name} to use ${OPERATOR_IMAGE}; found ${image:-<none>}" >&2
+      return 1
+    fi
+    sleep 5
+  done
   kubectl --kubeconfig "${kubeconfig}" -n "${NETWORK_NAMESPACE}" \
     rollout status "daemonset/${network_name}" --timeout=8m
+}
+
+wait_for_ipv6_inner_faces() {
+  local deadline=$((SECONDS + 300))
+  local faces
+
+  while true; do
+    faces="$(primary_kubectl -n "${NETWORK_NAMESPACE}" get routers \
+      -l "network.named-data.net/name=${NETWORK_NAME}" \
+      -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.innerFace}{"\n"}{end}' 2>/dev/null || true)"
+    if printf '%s\n' "${faces}" | grep -Eq 'udp://\[[0-9a-fA-F:]+'; then
+      printf '%s\n' "${faces}"
+      return 0
+    fi
+    if (( SECONDS >= deadline )); then
+      echo "Timed out waiting for primary routers to publish IPv6 inner faces" >&2
+      printf '%s\n' "${faces}" >&2
+      return 1
+    fi
+    sleep 5
+  done
+}
+
+wait_for_websocket_address() {
+  local deadline=$((SECONDS + 600))
+  local address
+
+  while true; do
+    address="$(primary_kubectl -n "${NETWORK_NAMESPACE}" get service "${NETWORK_NAME}-ws" \
+      -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+    if [[ -z "${address}" ]]; then
+      address="$(primary_kubectl -n "${NETWORK_NAMESPACE}" get service "${NETWORK_NAME}-ws" \
+        -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
+    fi
+    if [[ -n "${address}" ]]; then
+      printf '%s' "${address}"
+      return 0
+    fi
+    if (( SECONDS >= deadline )); then
+      echo "Timed out waiting for service/${NETWORK_NAME}-ws to receive an external address" >&2
+      return 1
+    fi
+    sleep 5
+  done
+}
+
+wait_for_peer_outer_neighbor() {
+  local uri="$1"
+  local deadline=$((SECONDS + 300))
+  local neighbors
+
+  while true; do
+    neighbors="$(peer_kubectl -n "${NETWORK_NAMESPACE}" get routers \
+      -l "network.named-data.net/name=${PEER_NETWORK_NAME}" \
+      -o jsonpath='{range .items[*]}{range .status.outerNeighbors[*]}{.}{"\n"}{end}{end}' 2>/dev/null || true)"
+    if printf '%s\n' "${neighbors}" | grep -Fqx -- "${uri}"; then
+      return 0
+    fi
+    if (( SECONDS >= deadline )); then
+      echo "Timed out waiting for peer routers to receive outer neighbor ${uri}" >&2
+      printf '%s\n' "${neighbors}" >&2
+      return 1
+    fi
+    sleep 5
+  done
 }
 
 install_operator "primary cluster" "${PRIMARY_KUBECONFIG}"
@@ -160,17 +233,7 @@ wait_for_network_rollout "${PRIMARY_KUBECONFIG}" "${NETWORK_NAME}"
 wait_for_network_rollout "${PEER_KUBECONFIG}" "${PEER_NETWORK_NAME}"
 
 echo "Waiting for routers to publish IPv6 inner faces"
-timeout 5m bash -c '
-  set -euo pipefail
-  until kubectl --kubeconfig "$0" -n "$1" get routers -l "network.named-data.net/name=$2" \
-      -o jsonpath="{range .items[*]}{.metadata.name}{\" \"}{.status.innerFace}{\"\\n\"}{end}" \
-      | tee /tmp/ndn-primary-router-faces.txt \
-      | grep -Eq "udp://\\[[0-9a-fA-F:]+"; do
-    sleep 5
-  done
-' "${PRIMARY_KUBECONFIG}" "${NETWORK_NAMESPACE}" "${NETWORK_NAME}"
-
-cat /tmp/ndn-primary-router-faces.txt
+wait_for_ipv6_inner_faces
 
 echo "Applying primary producer and same-cluster consumer"
 primary_kubectl -n "${WORKLOAD_NAMESPACE}" apply -f "${ROOT_DIR}/examples/workloads/producer-pod.yaml"
@@ -181,22 +244,7 @@ primary_logs="$(primary_kubectl -n "${WORKLOAD_NAMESPACE}" logs job/test-ping)"
 assert_ping_received_data "Primary" "${primary_logs}"
 
 echo "Waiting for the primary public WebSocket face"
-ws_address="$(
-  timeout 10m bash -c '
-    set -euo pipefail
-    until address="$(kubectl --kubeconfig "$0" -n "$1" get service "$2" \
-        -o jsonpath="{.status.loadBalancer.ingress[0].ip}" 2>/dev/null)" \
-        && [[ -n "${address}" ]]; do
-      address="$(kubectl --kubeconfig "$0" -n "$1" get service "$2" \
-        -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null || true)"
-      if [[ -n "${address}" ]]; then
-        break
-      fi
-      sleep 5
-    done
-    printf "%s" "${address}"
-  ' "${PRIMARY_KUBECONFIG}" "${NETWORK_NAMESPACE}" "${NETWORK_NAME}-ws"
-)"
+ws_address="$(wait_for_websocket_address)"
 ws_host="${ws_address}"
 if [[ "${ws_host}" == *:* && "${ws_host}" != \[*\] ]]; then
   ws_host="[${ws_host}]"
@@ -214,14 +262,7 @@ spec:
 EOF
 
 echo "Waiting for the peer router to receive the external neighbor"
-timeout 5m bash -c '
-  set -euo pipefail
-  until kubectl --kubeconfig "$0" -n "$1" get routers -l "network.named-data.net/name=$2" \
-      -o jsonpath="{range .items[*]}{range .status.outerNeighbors[*]}{.}{\"\\n\"}{end}{end}" \
-      | grep -Fx -- "$3"; do
-    sleep 5
-  done
-' "${PEER_KUBECONFIG}" "${NETWORK_NAMESPACE}" "${PEER_NETWORK_NAME}" "${ws_uri}"
+wait_for_peer_outer_neighbor "${ws_uri}"
 
 echo "Applying cross-cluster consumer"
 peer_kubectl -n "${WORKLOAD_NAMESPACE}" apply \
