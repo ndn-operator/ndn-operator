@@ -58,6 +58,9 @@ install_operator() {
 
   kubectl --kubeconfig "${kubeconfig}" -n "${OPERATOR_NAMESPACE}" \
     rollout status deployment/ndn-controller --timeout=5m
+  # Generated injector TLS is rotated by Helm upgrades; restart to load the new serving certificate.
+  kubectl --kubeconfig "${kubeconfig}" -n "${OPERATOR_NAMESPACE}" \
+    rollout restart deployment/ndn-injector
   kubectl --kubeconfig "${kubeconfig}" -n "${OPERATOR_NAMESPACE}" \
     rollout status deployment/ndn-injector --timeout=5m
 }
