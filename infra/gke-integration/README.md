@@ -8,7 +8,9 @@ networks to the current GitHub runner IP.
 
 The data-path test exposes a WebSocket face through a public LoadBalancer in the
 primary cluster. The peer cluster reaches that endpoint over its own Cloud NAT,
-so there is no VPC peering or private cross-region connectivity.
+so there is no VPC peering or private cross-region connectivity. The peer
+enables WebSocket behind an internal `ClusterIP` service only, allowing its
+outbound `Neighbor` link without publishing a second public endpoint.
 
 The workflow runs when a trusted pull request has the `run-gke-integration`
 label.

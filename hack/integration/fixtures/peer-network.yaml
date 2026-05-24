@@ -15,3 +15,9 @@ spec:
     kind: Certificate
   - name: primary-root
     kind: ExternalCertificate
+  faces:
+    websocket:
+      port: 9696
+      serviceTemplate:
+        spec:
+          type: ClusterIP

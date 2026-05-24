@@ -18,3 +18,9 @@ spec:
     kind: ExternalCertificate
   - name: test2-root
     kind: Certificate
+  faces:
+    websocket:
+      port: 9696
+      serviceTemplate:
+        spec:
+          type: ClusterIP

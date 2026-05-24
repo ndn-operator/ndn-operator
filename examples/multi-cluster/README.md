@@ -1,7 +1,9 @@
 # WebSocket multi-cluster example
 
 This example connects two independently secured NDN networks through a public
-WebSocket face exposed by cluster 1. Each cluster creates its own local root
+WebSocket face exposed by cluster 1. Cluster 2 enables WebSocket behind an
+internal `ClusterIP` service only, because `ndnd` needs that transport enabled
+to initiate its outbound Neighbor link. Each cluster creates its own local root
 certificate; only the public root certificate is imported into the other
 cluster. Run the following commands from this directory after installing the
 operator in both clusters.
@@ -43,3 +45,5 @@ sed "s/<address>/${address}/" cluster-2/neighbor-2.yaml | kubectl --context clus
 ```
 
 Cluster 2 can now learn routes exposed by cluster 1 over the WebSocket link.
+Only cluster 1 publishes a public WebSocket endpoint; cluster 2's `test2-ws`
+service remains internal to its cluster.
