@@ -180,7 +180,7 @@ wait_for_peer_outer_neighbor() {
   while true; do
     neighbors="$(peer_kubectl -n "${NETWORK_NAMESPACE}" get routers \
       -l "network.named-data.net/name=${PEER_NETWORK_NAME}" \
-      -o jsonpath='{range .items[*]}{range .status.outerNeighbors[*]}{.}{"\n"}{end}{end}' 2>/dev/null || true)"
+      -o jsonpath='{range .items[*]}{.status.outerNeighbors.to-test}{"\n"}{end}' 2>/dev/null || true)"
     if printf '%s\n' "${neighbors}" | grep -Fqx -- "${uri}"; then
       return 0
     fi
