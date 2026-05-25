@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: test-helloworld-consumer
+  name: peer-rejects-sibling-forgery
 spec:
   ttlSecondsAfterFinished: 600
   template:
@@ -10,22 +10,17 @@ spec:
         networks.named-data.net/name: test
         networks.named-data.net/namespace: mynetwork
         credentials.named-data.net/container: consumer
-        credentials.named-data.net/trust-anchors: Certificate/app-root
-        credentials.named-data.net/certificate-chain: Certificate/app-subnetwork1-ca,Certificate/app-subnetwork1-helloworld
+        credentials.named-data.net/trust-anchors: ExternalCertificate/app-root
+        credentials.named-data.net/certificate-chain: ExternalCertificate/app-subnetwork2-ca,ExternalCertificate/app-subnetwork2-helloworld
       labels:
         named-data.net/inject: "true"
     spec:
       restartPolicy: Never
-      tolerations:
-      - key: kubernetes.io/arch
-        operator: Equal
-        value: arm64
-        effect: NoSchedule
       containers:
       - name: consumer
         image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
         command: ["/consumer"]
-        args: ["--name", "/root-network/subnetwork1/helloworld/valid"]
+        args: ["--expect-reject", "--name", "/root-network/subnetwork1/helloworld/forged"]
         imagePullPolicy: IfNotPresent
         resources:
           limits:

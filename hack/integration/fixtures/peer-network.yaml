@@ -3,7 +3,8 @@ kind: Network
 metadata:
   name: test
 spec:
-  prefix: /test
+  prefix: /root-network/subnetwork2
+  dvNetwork: /root-network
   udpUnicastPort: 6363
   ndnd:
     image: ghcr.io/named-data/ndnd:1.5.2

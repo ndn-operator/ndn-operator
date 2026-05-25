@@ -4,7 +4,8 @@ metadata:
   name: test
   namespace: mynetwork
 spec:
-  prefix: /test
+  prefix: /root-network/subnetwork1
+  dvNetwork: /root-network
   udpUnicastPort: 6363
   ndnd:
     image: ghcr.io/named-data/ndnd:1.5.2

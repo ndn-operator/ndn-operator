@@ -15,3 +15,6 @@ rules:
 - apiGroups: ["named-data.net"]
   resources: ["routers"]
   verbs: ["get", "list"]
+- apiGroups: ["named-data.net"]
+  resources: ["certificates", "externalcertificates"]
+  verbs: ["get", "list"]
