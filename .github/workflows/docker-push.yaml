@@ -222,6 +222,9 @@ jobs:
       TF_VAR_region: ${{ vars.GKE_INTEGRATION_REGION || 'us-west1' }}
       TF_VAR_location: ${{ vars.GKE_INTEGRATION_LOCATION || 'us-west1-a' }}
       TF_VAR_machine_type: ${{ vars.GKE_INTEGRATION_MACHINE_TYPE || 'n4a-standard-2' }}
+      TF_VAR_peer_region: ${{ vars.GKE_INTEGRATION_PEER_REGION || 'us-south1' }}
+      TF_VAR_peer_location: ${{ vars.GKE_INTEGRATION_PEER_LOCATION || 'us-south1-a' }}
+      TF_VAR_peer_machine_type: ${{ vars.GKE_INTEGRATION_PEER_MACHINE_TYPE || 'e2-standard-2' }}
       TF_VAR_name: ndn-it-${{ github.event.pull_request.number }}-${{ github.run_id }}
       TF_VAR_pr_number: ${{ github.event.pull_request.number }}
       TF_VAR_run_id: ${{ github.run_id }}
@@ -288,35 +291,62 @@ jobs:
       run: |
         echo "cluster_name=$(tofu output -raw cluster_name)" >> "$GITHUB_OUTPUT"
         echo "cluster_location=$(tofu output -raw cluster_location)" >> "$GITHUB_OUTPUT"
-    - name: Get GKE credentials
-      id: credentials
+        echo "peer_cluster_name=$(tofu output -raw peer_cluster_name)" >> "$GITHUB_OUTPUT"
+        echo "peer_cluster_location=$(tofu output -raw peer_cluster_location)" >> "$GITHUB_OUTPUT"
+    - name: Get primary GKE credentials
+      id: primary-credentials
       uses: google-github-actions/get-gke-credentials@v3
       with:
         project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
         cluster_name: ${{ steps.tofu-output.outputs.cluster_name }}
         location: ${{ steps.tofu-output.outputs.cluster_location }}
+    - name: Get peer GKE credentials
+      id: peer-credentials
+      uses: google-github-actions/get-gke-credentials@v3
+      with:
+        project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
+        cluster_name: ${{ steps.tofu-output.outputs.peer_cluster_name }}
+        location: ${{ steps.tofu-output.outputs.peer_cluster_location }}
     - name: Run NDN integration tests
       env:
         OPERATOR_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}
         REPO_UNDER_TEST_DIR: ${{ github.workspace }}/under-test
+        PRIMARY_KUBECONFIG: ${{ steps.primary-credentials.outputs.kubeconfig_path }}
+        PEER_KUBECONFIG: ${{ steps.peer-credentials.outputs.kubeconfig_path }}
       run: trusted/hack/integration/run-gke-tests.sh
     - name: Refresh Google Cloud auth before artifacts
-      if: always() && steps.credentials.outcome == 'success'
+      if: always() && (steps.primary-credentials.outcome == 'success' || steps.peer-credentials.outcome == 'success')
       uses: google-github-actions/auth@v3
       with:
         project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
         workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-    - name: Refresh GKE credentials before artifacts
-      if: always() && steps.credentials.outcome == 'success'
+    - name: Refresh primary GKE credentials before artifacts
+      id: primary-artifact-credentials
+      if: always() && steps.primary-credentials.outcome == 'success'
       uses: google-github-actions/get-gke-credentials@v3
       with:
         project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
         cluster_name: ${{ steps.tofu-output.outputs.cluster_name }}
         location: ${{ steps.tofu-output.outputs.cluster_location }}
-    - name: Collect cluster artifacts
-      if: always() && steps.credentials.outcome == 'success'
+    - name: Refresh peer GKE credentials before artifacts
+      id: peer-artifact-credentials
+      if: always() && steps.peer-credentials.outcome == 'success'
+      uses: google-github-actions/get-gke-credentials@v3
+      with:
+        project_id: ${{ vars.GKE_INTEGRATION_PROJECT_ID }}
+        cluster_name: ${{ steps.tofu-output.outputs.peer_cluster_name }}
+        location: ${{ steps.tofu-output.outputs.peer_cluster_location }}
+    - name: Collect primary cluster artifacts
+      if: always() && steps.primary-artifact-credentials.outcome == 'success'
       env:
-        ARTIFACT_DIR: artifacts/gke-integration
+        KUBECONFIG_PATH: ${{ steps.primary-artifact-credentials.outputs.kubeconfig_path }}
+        ARTIFACT_DIR: artifacts/gke-integration/primary
+      run: trusted/hack/integration/collect-artifacts.sh
+    - name: Collect peer cluster artifacts
+      if: always() && steps.peer-artifact-credentials.outcome == 'success'
+      env:
+        KUBECONFIG_PATH: ${{ steps.peer-artifact-credentials.outputs.kubeconfig_path }}
+        ARTIFACT_DIR: artifacts/gke-integration/peer
       run: trusted/hack/integration/collect-artifacts.sh
     - name: Upload cluster artifacts
       if: always()
@@ -325,6 +355,12 @@ jobs:
         name: gke-integration-${{ github.event.pull_request.number }}-${{ github.run_id }}
         path: artifacts/gke-integration
         if-no-files-found: ignore
+    - name: Remove public TCP service before destroy
+      if: always() && steps.primary-artifact-credentials.outcome == 'success'
+      continue-on-error: true
+      env:
+        KUBECONFIG_PATH: ${{ steps.primary-artifact-credentials.outputs.kubeconfig_path }}
+      run: kubectl --kubeconfig "$KUBECONFIG_PATH" -n mynetwork delete service test-tcp --ignore-not-found --wait=true --timeout=5m
     - name: Refresh Google Cloud auth before destroy
       if: always() && steps.tofu-init.outcome == 'success'
       uses: google-github-actions/auth@v3

@@ -1,26 +1,26 @@
 apiVersion: named-data.net/v1alpha1
 kind: Network
 metadata:
-  name: test1
+  name: test
   namespace: mynetwork
 spec:
-  prefix: /test1
+  prefix: /test
   udpUnicastPort: 6363
   ndnd:
     image: ghcr.io/named-data/ndnd:1.5.2
   operator:
     image: ghcr.io/ndn-operator/ndn-operator:latest
   routerCertIssuer:
-    kind: ExternalCertificate
-    name: test1-cert
+    kind: Certificate
+    name: test1-root
   trustAnchors:
-  - name: test1-cert
-    kind: ExternalCertificate
-  - name: test2-cert
+  - name: test1-root
+    kind: Certificate
+  - name: test2-root
     kind: ExternalCertificate
   faces:
     tcp:
-      port: 6364
+      port: 6363
       serviceTemplate:
         spec:
           type: LoadBalancer

@@ -1,7 +1,6 @@
 apiVersion: named-data.net/v1alpha1
 kind: ExternalCertificate
 metadata:
-  name: test2-cert
-  namespace: mynetwork
+  name: peer-root
 spec:
-  secretName: test2-cert
+  secretName: peer-root
