@@ -33,6 +33,12 @@ spec:
         properties:
           spec:
             properties:
+              dvNetwork:
+                description: |-
+                  The shared ndn-dv routing domain prefix used for router identities and
+                  router certificates. Defaults to `prefix` when not specified.
+                nullable: true
+                type: string
               faces:
                 description: Public faces to expose from router pods
                 nullable: true
@@ -399,8 +405,8 @@ spec:
                 type: object
               prefix:
                 description: |-
-                  The prefix for the network, used for routing and naming conventions.
-                  This should be a valid NDN prefix, e.g., "/example/network"
+                  The application prefix injected into workloads attached to this network.
+                  This should be a valid NDN prefix, e.g., "/example/network".
                 type: string
               routerCertIssuer:
                 description: |-

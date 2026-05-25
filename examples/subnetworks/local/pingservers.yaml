@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: subnetwork1-pingserver
+  namespace: mynetwork
+  annotations:
+    networks.named-data.net/name: subnetwork1
+    networks.named-data.net/namespace: mynetwork
+  labels:
+    named-data.net/inject: "true"
+spec:
+  containers:
+  - name: server
+    image: ghcr.io/named-data/ndnd:1.5.2
+    command: ["/ndnd", "pingserver", "--expose"]
+    args: ["/root-network/subnetwork1/pingserver"]
+    imagePullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: subnetwork2-pingserver
+  namespace: mynetwork
+  annotations:
+    networks.named-data.net/name: subnetwork2
+    networks.named-data.net/namespace: mynetwork
+  labels:
+    named-data.net/inject: "true"
+spec:
+  containers:
+  - name: server
+    image: ghcr.io/named-data/ndnd:1.5.2
+    command: ["/ndnd", "pingserver", "--expose"]
+    args: ["/root-network/subnetwork2/pingserver"]
+    imagePullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi

@@ -45,6 +45,22 @@ kubectl apply \
     -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/workloads/consumer-job.yaml
 ```
 
+## Share routing across application prefixes
+
+`Network.spec.prefix` is the application prefix injected into attached
+workloads. Set `Network.spec.dvNetwork` when distinct Networks should exchange
+routes in the same `ndnd` distance-vector domain. For example,
+`/root-network/subnetwork1` and `/root-network/subnetwork2` can both set
+`dvNetwork: /root-network`.
+
+When `dvNetwork` is omitted, it defaults to `spec.prefix`. This differs from
+older operator versions, which constructed the `ndnd` routing domain from the
+Network resource name. Existing examples such as `name: test` with
+`prefix: /test` retain the same routing domain.
+
+See `examples/subnetworks/local` for a secured two-Network example runnable on
+a single Rancher Desktop Kubernetes node.
+
 ## Architecture
 NDN Operator has two main services:
 * Controller. It utilizes DaemonSets to configure and run `ndnd` on each node

@@ -1,0 +1,8 @@
+apiVersion: named-data.net/v1alpha1
+kind: Neighbor
+metadata:
+  name: to-subnetwork1
+  namespace: mynetwork
+spec:
+  network: subnetwork2
+  uri: "tcp://subnetwork1-tcp.mynetwork.svc.cluster.local:16363"

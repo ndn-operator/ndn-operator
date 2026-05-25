@@ -5,7 +5,8 @@ use operator::network_controller::{IpFamily, NdndSpec, Network, NetworkSpec, Ope
 
 fn test_network_spec() -> NetworkSpec {
     NetworkSpec {
-        prefix: "/test".into(),
+        prefix: "/root-network/subnetwork1".into(),
+        dv_network: Some("/root-network".into()),
         udp_unicast_port: 6363,
         ip_family: IpFamily::IPv4,
         node_selector: None,
@@ -44,13 +45,16 @@ fn daemonset_builder_basic() {
     // Ensure env var presence
     let init = init_vec.first().cloned();
     if let Some(init_ct) = init {
-        let env_names: Vec<String> = init_ct
-            .env
-            .unwrap_or_default()
-            .into_iter()
-            .map(|e| e.name)
-            .collect();
+        let env = init_ct.env.unwrap_or_default();
+        let env_names: Vec<String> = env.iter().map(|e| e.name.clone()).collect();
         assert!(env_names.contains(&"NDN_NETWORK_NAME".to_string()));
+        assert!(env_names.contains(&"NDN_DV_NETWORK".to_string()));
         assert!(env_names.contains(&"NDN_SOCKET_PATH".to_string()));
+        assert_eq!(
+            env.iter()
+                .find(|e| e.name == "NDN_DV_NETWORK")
+                .and_then(|e| e.value.as_deref()),
+            Some("/root-network")
+        );
     }
 }

@@ -35,7 +35,7 @@ struct Args {
 
 #[derive(Debug, Clone)]
 struct GenConfigParams {
-    network_name: String,
+    dv_network: String,
     router_name: String,
     udp_unicast_port: u16,
     keychain: String,
@@ -55,7 +55,7 @@ struct ResolvedTrustAnchor {
 
 fn gen_config(params: GenConfigParams) -> NdndConfig {
     let GenConfigParams {
-        network_name,
+        dv_network,
         router_name,
         udp_unicast_port,
         keychain,
@@ -66,8 +66,8 @@ fn gen_config(params: GenConfigParams) -> NdndConfig {
     } = params;
     NdndConfig {
         dv: RouterConfig {
-            network: format!("/{network_name}"),
-            router: format!("/{network_name}/{router_name}"),
+            network: dv_network.clone(),
+            router: format!("{dv_network}/{router_name}"),
             keychain,
             trust_anchors,
             ..RouterConfig::default()
@@ -244,7 +244,7 @@ async fn resolve_trust_anchor(
 async fn main() -> anyhow::Result<()> {
     telemetry::init().await;
     let args = Args::parse();
-    let network_name = env::var("NDN_NETWORK_NAME")?;
+    let dv_network = env::var("NDN_DV_NETWORK")?;
     let network_namespace = env::var("NDN_NETWORK_NAMESPACE")?;
     let router_name = env::var("NDN_ROUTER_NAME")?;
     let certificate_name = env::var("NDN_ROUTER_CERT_NAME").unwrap_or(router_name.clone());
@@ -305,7 +305,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Generate Ndnd config
     let config = gen_config(GenConfigParams {
-        network_name: network_name.clone(),
+        dv_network,
         router_name: router_name.clone(),
         udp_unicast_port,
         keychain,
@@ -443,4 +443,26 @@ async fn main() -> anyhow::Result<()> {
     info!("Patched router status: {:?}", router.status);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gen_config_uses_dv_network_for_router_identity() {
+        let config = gen_config(GenConfigParams {
+            dv_network: "/root-network".into(),
+            router_name: "router-a".into(),
+            udp_unicast_port: 6363,
+            keychain: "insecure".into(),
+            socket_path: None,
+            trust_anchors: None,
+            tcp_port: None,
+            ws_port: None,
+        });
+
+        assert_eq!(config.dv.network, "/root-network");
+        assert_eq!(config.dv.router, "/root-network/router-a");
+    }
 }

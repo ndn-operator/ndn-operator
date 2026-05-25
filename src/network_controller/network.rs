@@ -67,9 +67,12 @@ pub static HOST_KEYS_ROOT_DIR: &str = "/etc/ndn/keys";
     status = "NetworkStatus"
 )]
 pub struct NetworkSpec {
-    /// The prefix for the network, used for routing and naming conventions.
-    /// This should be a valid NDN prefix, e.g., "/example/network"
+    /// The application prefix injected into workloads attached to this network.
+    /// This should be a valid NDN prefix, e.g., "/example/network".
     pub prefix: String,
+    /// The shared ndn-dv routing domain prefix used for router identities and
+    /// router certificates. Defaults to `prefix` when not specified.
+    pub dv_network: Option<String>,
     /// The UDP unicast port for the nodes.
     /// Must be unique across all networks in the cluster.
     pub udp_unicast_port: u16,
@@ -328,6 +331,14 @@ pub struct NetworkStatus {
 }
 
 impl Network {
+    /// Resolve the ndn-dv routing domain for this network.
+    pub fn dv_network(&self) -> &str {
+        self.spec
+            .dv_network
+            .as_deref()
+            .unwrap_or(self.spec.prefix.as_str())
+    }
+
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
         let api_nw: Api<Network> = Api::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let serverside = PatchParams::apply(NETWORK_MANAGER_NAME);
@@ -712,7 +723,7 @@ impl Network {
                 ..ObjectMeta::default()
             },
             spec: RouterSpec {
-                prefix: format!("{}/{}", self.spec.prefix, name),
+                prefix: format!("{}/{}", self.dv_network(), name),
                 node_name: node_name.to_string(),
                 cert: cert.map(|c| CertificateRef {
                     name: c.metadata.name.unwrap_or_default(),
@@ -750,7 +761,7 @@ impl Network {
                 ..ObjectMeta::default()
             },
             spec: CertificateSpec {
-                prefix: format!("{}/{}/32=DV", self.spec.prefix, router_name),
+                prefix: format!("{}/{}/32=DV", self.dv_network(), router_name),
                 issuer: cert_issuer.clone(),
                 renew_interval: Some(DurationString::new(StdDuration::from_secs(60 * 60 * 24))), // Default to 1 day
                 renew_before: Some(DurationString::new(StdDuration::from_secs(60 * 60))), // Default to 1 hour
@@ -769,7 +780,8 @@ mod tests {
 
     fn sample_network() -> Network {
         let spec = NetworkSpec {
-            prefix: "/example".into(),
+            prefix: "/root-network/subnetwork1".into(),
+            dv_network: Some("/root-network".into()),
             udp_unicast_port: 6363,
             ip_family: IpFamily::IPv4,
             node_selector: None,
@@ -803,6 +815,16 @@ mod tests {
     }
 
     #[test]
+    fn explicit_dv_network_overrides_application_prefix_for_routing() {
+        let nw = sample_network();
+        assert_eq!(nw.dv_network(), "/root-network");
+
+        let mut defaulted = sample_network();
+        defaulted.spec.dv_network = None;
+        assert_eq!(defaulted.dv_network(), "/root-network/subnetwork1");
+    }
+
+    #[test]
     fn create_owned_service_account_has_owner_reference() {
         let nw = sample_network();
         let sa = nw.create_owned_sa();
@@ -828,7 +850,7 @@ mod tests {
         let router = nw
             .create_owned_router("router-1", "node-a", None)
             .expect("router");
-        assert_eq!(router.spec.prefix, "/example/router-1");
+        assert_eq!(router.spec.prefix, "/root-network/router-1");
         assert_eq!(router.spec.node_name, "node-a");
         let labels = router.metadata.labels.unwrap();
         assert_eq!(labels.get(super::NETWORK_LABEL_KEY), Some(&"demo".into()));
@@ -842,7 +864,7 @@ mod tests {
         let cert = nw
             .create_owned_certificate("router-1", "router-1", &issuer)
             .expect("cert");
-        assert_eq!(cert.spec.prefix, "/example/router-1/32=DV");
+        assert_eq!(cert.spec.prefix, "/root-network/router-1/32=DV");
         assert_eq!(cert.spec.issuer.name, issuer.name);
         assert_eq!(cert.metadata.name.as_deref(), Some("router-1"));
     }

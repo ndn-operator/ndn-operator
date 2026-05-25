@@ -259,6 +259,11 @@ fn network_init_env(nw: &Network, container_socket_path: &str) -> Vec<EnvVar> {
             ..EnvVar::default()
         },
         EnvVar {
+            name: "NDN_DV_NETWORK".into(),
+            value: Some(nw.dv_network().to_string()),
+            ..EnvVar::default()
+        },
+        EnvVar {
             name: "NDN_UDP_UNICAST_PORT".into(),
             value: Some(nw.spec.udp_unicast_port.to_string()),
             ..EnvVar::default()
@@ -373,7 +378,8 @@ mod tests {
 
     fn build_network(with_issuer: bool) -> Network {
         let spec = NetworkSpec {
-            prefix: "/example/net".into(),
+            prefix: "/root-network/subnetwork1".into(),
+            dv_network: Some("/root-network".into()),
             udp_unicast_port: 6363,
             ip_family: IpFamily::IPv6,
             node_selector: None,
@@ -429,6 +435,10 @@ mod tests {
         assert_eq!(
             env_value(&envs, "NDN_NETWORK_NAME").as_deref(),
             Some("demo")
+        );
+        assert_eq!(
+            env_value(&envs, "NDN_DV_NETWORK").as_deref(),
+            Some("/root-network")
         );
         assert_eq!(
             env_value(&envs, "NDN_SOCKET_PATH").as_deref(),
