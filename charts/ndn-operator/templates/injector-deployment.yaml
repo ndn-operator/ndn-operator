@@ -20,7 +20,7 @@ spec:
         named-data.net/instance: {{ .Release.Name }}
         chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
-      serviceAccountName: ndn-controller
+      serviceAccountName: ndn-injector
       {{- with .Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}

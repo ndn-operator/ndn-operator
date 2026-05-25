@@ -32,18 +32,33 @@ kubectl apply --namespace mynetwork \
 kubectl apply --namespace mynetwork \
     -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/secure/network.yaml
 ```
-### Pingserver
-Producers and consumers may live in different Kubernetes namespaces from the network, and from each other.
-* Producer:
+### Signed helloworld application
+Producers and consumers may live in a different Kubernetes namespace from the
+Network. Application credentials are created in the workload namespace because
+Kubernetes cannot mount Secrets across namespaces:
+
 ```shell
-kubectl apply \
+kubectl create namespace ndn-workloads
+kubectl apply --namespace ndn-workloads \
+    -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/workloads/application-certificates.yaml
+```
+
+Run the signed Rust producer and its validating consumer in that namespace:
+
+```shell
+kubectl apply --namespace ndn-workloads \
     -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/workloads/producer-pod.yaml
 ```
-* Consumer
 ```shell
-kubectl apply \
+kubectl apply --namespace ndn-workloads \
     -f https://raw.githubusercontent.com/ndn-operator/ndn-operator/refs/heads/main/examples/workloads/consumer-job.yaml
 ```
+
+The workload image is built by `ndn-helloworld-rs`, a Rust producer/consumer
+application based on `Quarmire/ndn-rs` pinned at
+`991ab06233d0b7596eda30e70fe069659be50042`. The consumer verifies ECDSA
+signatures and an embedded LVS policy, so successful routing is not mistaken
+for authenticated Data acceptance.
 
 ## Share routing across application prefixes
 
@@ -60,6 +75,30 @@ Network resource name. Existing examples such as `name: test` with
 
 See `examples/subnetworks/local` for a secured two-Network example runnable on
 a single Rancher Desktop Kubernetes node.
+
+## Application credential injection
+
+An injected Pod may opt into application credentials for one named container:
+
+| Annotation | Purpose |
+| --- | --- |
+| `credentials.named-data.net/container: <container-name>` | Selects the only container receiving credential mounts. |
+| `credentials.named-data.net/signing: <Kind>/<name>` | Mounts a private key and leaf certificate for signing. |
+| `credentials.named-data.net/trust-anchors: <Kind>/<name>[,...]` | Mounts explicitly trusted public roots. |
+| `credentials.named-data.net/certificate-chain: <Kind>/<name>[,...]` | Mounts untrusted public chain certificates. |
+
+`Kind` is `Certificate` or `ExternalCertificate`; references resolve in the
+Pod namespace. The injector exposes the resolved material through:
+
+```text
+NDN_APP_SIGNING_KEY_FILE=/etc/ndn/app/signing/ndn.key
+NDN_APP_SIGNING_CERT_FILE=/etc/ndn/app/signing/ndn.cert
+NDN_APP_TRUST_ANCHOR_DIR=/etc/ndn/app/trust-anchors
+NDN_APP_CERTIFICATE_CHAIN_DIR=/etc/ndn/app/certificate-chain
+```
+
+The existing socket injection variables `NDN_CLIENT_TRANSPORT` and
+`NDN_PREFIX` remain available to every injected application container.
 
 ## Architecture
 NDN Operator has two main services:

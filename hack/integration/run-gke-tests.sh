@@ -73,34 +73,64 @@ create_namespaces() {
     --dry-run=client -o yaml | kubectl --kubeconfig "${kubeconfig}" apply -f -
 }
 
-import_public_root() {
+import_certificate_material() {
   local source_kubeconfig="$1"
-  local source_certificate="$2"
-  local destination_kubeconfig="$3"
-  local destination_secret="$4"
+  local source_namespace="$2"
+  local source_certificate="$3"
+  local destination_kubeconfig="$4"
+  local destination_namespace="$5"
+  local destination_secret="$6"
+  local include_key="${7:-false}"
   local source_secret
   local encoded_certificate
   local certificate_text
+  local key_secret
+  local encoded_key
+  local key_text
+  local -a secret_args
 
-  source_secret="$(kubectl --kubeconfig "${source_kubeconfig}" -n "${NETWORK_NAMESPACE}" \
+  source_secret="$(kubectl --kubeconfig "${source_kubeconfig}" -n "${source_namespace}" \
     get certificate "${source_certificate}" -o jsonpath='{.status.cert.secret}')"
-  encoded_certificate="$(kubectl --kubeconfig "${source_kubeconfig}" -n "${NETWORK_NAMESPACE}" \
+  encoded_certificate="$(kubectl --kubeconfig "${source_kubeconfig}" -n "${source_namespace}" \
     get secret "${source_secret}" -o jsonpath='{.data.ndn\.cert}')"
   certificate_text="$(printf '%s' "${encoded_certificate}" | base64 --decode)"
 
-  kubectl --kubeconfig "${destination_kubeconfig}" -n "${NETWORK_NAMESPACE}" \
-    create secret generic "${destination_secret}" \
-    --from-literal="ndn.cert=${certificate_text}" --dry-run=client -o yaml \
+  secret_args=(
+    kubectl --kubeconfig "${destination_kubeconfig}" -n "${destination_namespace}"
+    create secret generic "${destination_secret}"
+    --from-literal="ndn.cert=${certificate_text}"
+  )
+  if [[ "${include_key}" == "true" ]]; then
+    key_secret="$(kubectl --kubeconfig "${source_kubeconfig}" -n "${source_namespace}" \
+      get certificate "${source_certificate}" -o jsonpath='{.status.key.secret}')"
+    encoded_key="$(kubectl --kubeconfig "${source_kubeconfig}" -n "${source_namespace}" \
+      get secret "${key_secret}" -o jsonpath='{.data.ndn\.key}')"
+    key_text="$(printf '%s' "${encoded_key}" | base64 --decode)"
+    secret_args+=(--from-literal="ndn.key=${key_text}")
+  fi
+
+  "${secret_args[@]}" --dry-run=client -o yaml \
     | kubectl --kubeconfig "${destination_kubeconfig}" apply -f -
 }
 
-assert_ping_received_data() {
+assert_verified_data() {
   local cluster_name="$1"
   local job_logs="$2"
   echo "${cluster_name} consumer output:"
   printf '%s\n' "${job_logs}"
-  if [[ "${job_logs}" != *"content from /test/pingserver:"* ]]; then
-    echo "${cluster_name} consumer received no Data packets" >&2
+  if [[ "${job_logs}" != *"VERIFIED data /root-network/subnetwork1/helloworld/valid:"* ]]; then
+    echo "${cluster_name} consumer did not validate signed Data" >&2
+    return 1
+  fi
+}
+
+assert_rejected_data() {
+  local cluster_name="$1"
+  local job_logs="$2"
+  echo "${cluster_name} rejection output:"
+  printf '%s\n' "${job_logs}"
+  if [[ "${job_logs}" != *"REJECTED data /root-network/subnetwork1/helloworld/forged:"* ]]; then
+    echo "${cluster_name} consumer did not reject sibling-prefix impersonation" >&2
     return 1
   fi
 }
@@ -208,8 +238,10 @@ peer_kubectl -n "${NETWORK_NAMESPACE}" wait --for=condition=Ready \
   "certificate/${PEER_ROOT_NAME}" --timeout=5m
 
 echo "Exchanging public trust anchors between clusters"
-import_public_root "${PRIMARY_KUBECONFIG}" "${PRIMARY_ROOT_NAME}" "${PEER_KUBECONFIG}" "primary-root"
-import_public_root "${PEER_KUBECONFIG}" "${PEER_ROOT_NAME}" "${PRIMARY_KUBECONFIG}" "peer-root"
+import_certificate_material "${PRIMARY_KUBECONFIG}" "${NETWORK_NAMESPACE}" "${PRIMARY_ROOT_NAME}" \
+  "${PEER_KUBECONFIG}" "${NETWORK_NAMESPACE}" "primary-root"
+import_certificate_material "${PEER_KUBECONFIG}" "${NETWORK_NAMESPACE}" "${PEER_ROOT_NAME}" \
+  "${PRIMARY_KUBECONFIG}" "${NETWORK_NAMESPACE}" "peer-root"
 primary_kubectl -n "${NETWORK_NAMESPACE}" apply \
   -f "${ROOT_DIR}/hack/integration/fixtures/primary-peer-root.yaml"
 peer_kubectl -n "${NETWORK_NAMESPACE}" apply \
@@ -238,13 +270,38 @@ wait_for_network_rollout "${PEER_KUBECONFIG}" "${PEER_NETWORK_NAME}"
 echo "Waiting for routers to publish IPv6 inner faces"
 wait_for_ipv6_inner_faces
 
-echo "Applying primary producer and same-cluster consumer"
+echo "Creating application signing and validation credentials"
+primary_kubectl -n "${WORKLOAD_NAMESPACE}" apply \
+  -f "${ROOT_DIR}/examples/workloads/application-certificates.yaml"
+primary_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Ready \
+  certificate/app-root certificate/app-subnetwork1-ca certificate/app-subnetwork1-helloworld \
+  certificate/app-subnetwork2-ca certificate/app-subnetwork2-helloworld --timeout=5m
+
+echo "Exporting the public application chain and one deliberate forging signer to the peer"
+import_certificate_material "${PRIMARY_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "app-root" \
+  "${PEER_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "app-root"
+import_certificate_material "${PRIMARY_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "app-subnetwork1-ca" \
+  "${PEER_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "app-subnetwork1-ca"
+import_certificate_material "${PRIMARY_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "app-subnetwork1-helloworld" \
+  "${PEER_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "app-subnetwork1-helloworld"
+import_certificate_material "${PRIMARY_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "app-subnetwork2-ca" \
+  "${PEER_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "app-subnetwork2-ca"
+import_certificate_material "${PRIMARY_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "app-subnetwork2-helloworld" \
+  "${PEER_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "app-subnetwork2-helloworld" true
+peer_kubectl -n "${WORKLOAD_NAMESPACE}" apply \
+  -f "${ROOT_DIR}/hack/integration/fixtures/peer-app-certificates.yaml"
+peer_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Ready \
+  externalcertificate/app-root externalcertificate/app-subnetwork1-ca \
+  externalcertificate/app-subnetwork1-helloworld externalcertificate/app-subnetwork2-ca \
+  externalcertificate/app-subnetwork2-helloworld --timeout=5m
+
+echo "Applying signed primary producer and same-cluster validating consumer"
 primary_kubectl -n "${WORKLOAD_NAMESPACE}" apply -f "${ROOT_DIR}/examples/workloads/producer-pod.yaml"
-primary_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Ready pod/test-pingserver --timeout=5m
+primary_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Ready pod/test-helloworld-producer --timeout=5m
 primary_kubectl -n "${WORKLOAD_NAMESPACE}" apply -f "${ROOT_DIR}/examples/workloads/consumer-job.yaml"
-primary_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Complete job/test-ping --timeout=6m
-primary_logs="$(primary_kubectl -n "${WORKLOAD_NAMESPACE}" logs job/test-ping)"
-assert_ping_received_data "Primary" "${primary_logs}"
+primary_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Complete job/test-helloworld-consumer --timeout=6m
+primary_logs="$(primary_kubectl -n "${WORKLOAD_NAMESPACE}" logs job/test-helloworld-consumer)"
+assert_verified_data "Primary" "${primary_logs}"
 
 echo "Waiting for the primary public TCP face"
 tcp_address="$(wait_for_tcp_address)"
@@ -267,9 +324,19 @@ EOF
 echo "Waiting for the peer router to receive the external neighbor"
 wait_for_peer_outer_neighbor "${tcp_uri}"
 
-echo "Applying cross-cluster consumer"
+echo "Applying cross-cluster validating consumer"
 peer_kubectl -n "${WORKLOAD_NAMESPACE}" apply \
   -f "${ROOT_DIR}/hack/integration/fixtures/peer-consumer-job.yaml"
-peer_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Complete job/peer-test-ping --timeout=6m
-peer_logs="$(peer_kubectl -n "${WORKLOAD_NAMESPACE}" logs job/peer-test-ping)"
-assert_ping_received_data "Peer" "${peer_logs}"
+peer_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Complete job/peer-helloworld-consumer --timeout=6m
+peer_logs="$(peer_kubectl -n "${WORKLOAD_NAMESPACE}" logs job/peer-helloworld-consumer)"
+assert_verified_data "Peer" "${peer_logs}"
+
+echo "Applying peer sibling-prefix impersonation attempt"
+peer_kubectl -n "${WORKLOAD_NAMESPACE}" apply \
+  -f "${ROOT_DIR}/hack/integration/fixtures/peer-forger-pod.yaml"
+peer_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Ready pod/peer-helloworld-forger --timeout=5m
+peer_kubectl -n "${WORKLOAD_NAMESPACE}" apply \
+  -f "${ROOT_DIR}/hack/integration/fixtures/peer-rejection-job.yaml"
+peer_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Complete job/peer-rejects-sibling-forgery --timeout=6m
+rejection_logs="$(peer_kubectl -n "${WORKLOAD_NAMESPACE}" logs job/peer-rejects-sibling-forgery)"
+assert_rejected_data "Peer" "${rejection_logs}"

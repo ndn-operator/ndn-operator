@@ -9,7 +9,7 @@ COPY Cargo.toml Cargo.toml
 
 RUN cargo build --target=${TARGET} --release
 
-FROM ghcr.io/named-data/ndnd:latest AS ndnd
+FROM ghcr.io/named-data/ndnd:1.5.2 AS ndnd
 
 FROM scratch
 ARG TARGET

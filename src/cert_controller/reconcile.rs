@@ -31,7 +31,9 @@ impl Certificate {
         let api_cert: Api<Certificate> = Api::namespaced(ctx.client.clone(), &ns);
         let api_secret: Api<Secret> = Api::namespaced(ctx.client.clone(), &ns);
         let status = self.status().cloned().unwrap_or_default();
-        let mut action = Action::await_change();
+        // New certificates and pending issuers need another pass even when only
+        // status changes, which the semantic watcher deliberately suppresses.
+        let mut action = Action::requeue(StdDuration::from_secs(5));
 
         // Start with a working copy and surface RenewalRequired immediately from current status
         let mut _working = status.clone();
@@ -166,14 +168,6 @@ impl Certificate {
                         .status
                         .as_ref()
                         .ok_or(Error::OtherError("Issuer status not found".to_string()))?;
-                    // IssuerReady true as we could fetch usable status
-                    new_status.upsert_bool(
-                        "IssuerReady",
-                        true,
-                        "IssuerResolved",
-                        Some("Issuer status available"),
-                        self.metadata.generation.unwrap_or(0),
-                    );
                     let key_secret_name = issuer_status
                         .key_exists
                         .then(|| issuer_status.key.secret.clone())
@@ -184,6 +178,37 @@ impl Certificate {
                         .flatten();
                     let self_signed = issuer.metadata.uid.unwrap_or_default()
                         == self.metadata.uid.clone().unwrap_or_default();
+                    let issuer_ready =
+                        key_secret_name.is_some() && (self_signed || cert_secret_name.is_some());
+                    new_status.upsert_bool(
+                        "IssuerReady",
+                        issuer_ready,
+                        if issuer_ready {
+                            "IssuerResolved"
+                        } else {
+                            "IssuerNotReady"
+                        },
+                        if issuer_ready {
+                            Some("Certificate issuer is ready to sign")
+                        } else {
+                            Some("Certificate issuer key or certificate is not available yet")
+                        },
+                        self.metadata.generation.unwrap_or(0),
+                    );
+                    if !issuer_ready {
+                        emit_info(
+                            &ctx.recorder,
+                            self,
+                            "IssuerNotReady",
+                            "Waiting",
+                            Some(format!(
+                                "Certificate issuer `{}` is not ready to sign",
+                                issuer_ref.name
+                            )),
+                        )
+                        .await;
+                        return Ok(new_status);
+                    }
                     (key_secret_name, cert_secret_name, self_signed)
                 }
                 "ExternalCertificate" => {
@@ -333,6 +358,14 @@ impl Certificate {
         new_status.cert.secret = Some(cert_secret.name_any());
         new_status.cert.valid = true;
         new_status.cert_exists = true;
+        new_status.needs_renewal = false;
+        new_status.upsert_bool(
+            "RenewalRequired",
+            false,
+            "NotInWindow",
+            None,
+            self.metadata.generation.unwrap_or(0),
+        );
         // Update availability conditions and finish issuing
         set_availability_conditions(self, &mut new_status);
         new_status.upsert_bool(

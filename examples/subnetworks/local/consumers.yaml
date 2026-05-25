@@ -1,0 +1,101 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: subnetwork2-to-subnetwork1-helloworld
+  namespace: mynetwork
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      annotations:
+        networks.named-data.net/name: subnetwork2
+        networks.named-data.net/namespace: mynetwork
+        credentials.named-data.net/container: consumer
+        credentials.named-data.net/trust-anchors: Certificate/app-root
+        credentials.named-data.net/certificate-chain: Certificate/app-subnetwork1-ca,Certificate/app-subnetwork1-helloworld
+      labels:
+        named-data.net/inject: "true"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: consumer
+        image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
+        command: ["/consumer"]
+        args: ["--name", "/root-network/subnetwork1/helloworld/valid"]
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: subnetwork1-to-subnetwork2-helloworld
+  namespace: mynetwork
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      annotations:
+        networks.named-data.net/name: subnetwork1
+        networks.named-data.net/namespace: mynetwork
+        credentials.named-data.net/container: consumer
+        credentials.named-data.net/trust-anchors: Certificate/app-root
+        credentials.named-data.net/certificate-chain: Certificate/app-subnetwork2-ca,Certificate/app-subnetwork2-helloworld
+      labels:
+        named-data.net/inject: "true"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: consumer
+        image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
+        command: ["/consumer"]
+        args: ["--name", "/root-network/subnetwork2/helloworld/valid"]
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: subnetwork1-rejects-subnetwork2-forgery
+  namespace: mynetwork
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      annotations:
+        networks.named-data.net/name: subnetwork1
+        networks.named-data.net/namespace: mynetwork
+        credentials.named-data.net/container: consumer
+        credentials.named-data.net/trust-anchors: Certificate/app-root
+        credentials.named-data.net/certificate-chain: Certificate/app-subnetwork2-ca,Certificate/app-subnetwork2-helloworld
+      labels:
+        named-data.net/inject: "true"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: consumer
+        image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
+        command: ["/consumer"]
+        args:
+        - "--expect-reject"
+        - "--name"
+        - "/root-network/subnetwork1/helloworld/forged"
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi

@@ -43,12 +43,15 @@ kubectl --context rancher-desktop create namespace mynetwork --dry-run=client -o
   | kubectl --context rancher-desktop apply -f -
 ```
 
-Create the routing roots and Networks:
+Create router credentials, a separate application trust hierarchy, and the Networks:
 
 ```shell
 kubectl --context rancher-desktop apply -f certificates.yaml
 kubectl --context rancher-desktop -n mynetwork wait --for=condition=Ready \
-  certificate/subnetwork1-root certificate/subnetwork2-root --timeout=5m
+  certificate/subnetwork1-root certificate/subnetwork2-root \
+  certificate/app-root certificate/app-subnetwork1-ca certificate/app-subnetwork2-ca \
+  certificate/app-subnetwork1-helloworld certificate/app-subnetwork2-helloworld \
+  --timeout=5m
 kubectl --context rancher-desktop apply -f networks.yaml
 kubectl --context rancher-desktop -n mynetwork wait --for=condition=Ready \
   network/subnetwork1 network/subnetwork2 --timeout=5m
@@ -57,20 +60,26 @@ kubectl --context rancher-desktop -n mynetwork rollout status daemonset/subnetwo
 kubectl --context rancher-desktop apply -f neighbor.yaml
 ```
 
-Start both producers and run consumers in the opposite Network:
+Start signed producers, then run validating consumers in the opposite Network:
 
 ```shell
-kubectl --context rancher-desktop apply -f pingservers.yaml
+kubectl --context rancher-desktop apply -f producers.yaml
 kubectl --context rancher-desktop -n mynetwork wait --for=condition=Ready \
-  pod/subnetwork1-pingserver pod/subnetwork2-pingserver --timeout=5m
+  pod/subnetwork1-helloworld-producer pod/subnetwork2-helloworld-producer \
+  pod/subnetwork2-helloworld-forger --timeout=5m
 kubectl --context rancher-desktop -n mynetwork delete job \
-  subnetwork1-to-subnetwork2-ping subnetwork2-to-subnetwork1-ping \
+  subnetwork1-to-subnetwork2-helloworld subnetwork2-to-subnetwork1-helloworld \
+  subnetwork1-rejects-subnetwork2-forgery \
   --ignore-not-found
-kubectl --context rancher-desktop apply -f ping-jobs.yaml
+kubectl --context rancher-desktop apply -f consumers.yaml
 kubectl --context rancher-desktop -n mynetwork wait --for=condition=Complete \
-  job/subnetwork1-to-subnetwork2-ping job/subnetwork2-to-subnetwork1-ping --timeout=3m
-kubectl --context rancher-desktop -n mynetwork logs job/subnetwork1-to-subnetwork2-ping
-kubectl --context rancher-desktop -n mynetwork logs job/subnetwork2-to-subnetwork1-ping
+  job/subnetwork1-to-subnetwork2-helloworld job/subnetwork2-to-subnetwork1-helloworld \
+  job/subnetwork1-rejects-subnetwork2-forgery --timeout=3m
+kubectl --context rancher-desktop -n mynetwork logs job/subnetwork1-to-subnetwork2-helloworld
+kubectl --context rancher-desktop -n mynetwork logs job/subnetwork2-to-subnetwork1-helloworld
+kubectl --context rancher-desktop -n mynetwork logs job/subnetwork1-rejects-subnetwork2-forgery
 ```
 
-Each Job log should contain `content from` lines for the other child prefix.
+The first two Jobs log `VERIFIED data` for legitimate signed content. The
+third logs `REJECTED data` because the `subnetwork2` identity is not
+authorized to answer below the protected `subnetwork1` prefix.

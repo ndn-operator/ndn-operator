@@ -4,7 +4,7 @@ metadata:
   name: self-signed
   namespace: mynetwork
 spec:
-  prefix: /test
+  prefix: /root-network
   issuer:
     name: self-signed
     kind: Certificate

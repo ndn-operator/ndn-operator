@@ -1,25 +1,20 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: test-helloworld-producer
+  name: peer-helloworld-forger
   annotations:
     networks.named-data.net/name: test
     networks.named-data.net/namespace: mynetwork
     credentials.named-data.net/container: producer
-    credentials.named-data.net/signing: Certificate/app-subnetwork1-helloworld
+    credentials.named-data.net/signing: ExternalCertificate/app-subnetwork2-helloworld
   labels:
     named-data.net/inject: "true"
 spec:
-  tolerations:
-  - key: kubernetes.io/arch
-    operator: Equal
-    value: arm64
-    effect: NoSchedule
   containers:
   - name: producer
     image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
     command: ["/producer"]
-    args: ["--name", "/root-network/subnetwork1/helloworld/valid"]
+    args: ["--name", "/root-network/subnetwork1/helloworld/forged"]
     imagePullPolicy: IfNotPresent
     resources:
       limits:
