@@ -355,6 +355,12 @@ jobs:
         name: gke-integration-${{ github.event.pull_request.number }}-${{ github.run_id }}
         path: artifacts/gke-integration
         if-no-files-found: ignore
+    - name: Remove public TCP service before destroy
+      if: always() && steps.primary-artifact-credentials.outcome == 'success'
+      continue-on-error: true
+      env:
+        KUBECONFIG_PATH: ${{ steps.primary-artifact-credentials.outputs.kubeconfig_path }}
+      run: kubectl --kubeconfig "$KUBECONFIG_PATH" -n mynetwork delete service test-tcp --ignore-not-found --wait=true --timeout=5m
     - name: Refresh Google Cloud auth before destroy
       if: always() && steps.tofu-init.outcome == 'success'
       uses: google-github-actions/auth@v3

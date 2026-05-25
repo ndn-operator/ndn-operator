@@ -4,7 +4,7 @@ metadata:
   name: test2-root
   namespace: mynetwork
 spec:
-  prefix: /test2
+  prefix: /test
   issuer:
     name: test2-root
     kind: Certificate

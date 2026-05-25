@@ -12,7 +12,7 @@ OPERATOR_NAMESPACE="${OPERATOR_NAMESPACE:-ndn-operator}"
 NETWORK_NAMESPACE="${NETWORK_NAMESPACE:-mynetwork}"
 WORKLOAD_NAMESPACE="${WORKLOAD_NAMESPACE:-ndn-workloads}"
 NETWORK_NAME="${NETWORK_NAME:-test}"
-PEER_NETWORK_NAME="${PEER_NETWORK_NAME:-peer}"
+PEER_NETWORK_NAME="${PEER_NETWORK_NAME:-test}"
 PRIMARY_ROOT_NAME="${PRIMARY_ROOT_NAME:-self-signed}"
 PEER_ROOT_NAME="${PEER_ROOT_NAME:-peer-root}"
 ARM_TOLERATION='[{"key":"kubernetes.io/arch","operator":"Equal","value":"arm64","effect":"NoSchedule"}]'
@@ -149,15 +149,15 @@ wait_for_ipv6_inner_faces() {
   done
 }
 
-wait_for_websocket_address() {
+wait_for_tcp_address() {
   local deadline=$((SECONDS + 600))
   local address
 
   while true; do
-    address="$(primary_kubectl -n "${NETWORK_NAMESPACE}" get service "${NETWORK_NAME}-ws" \
+    address="$(primary_kubectl -n "${NETWORK_NAMESPACE}" get service "${NETWORK_NAME}-tcp" \
       -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
     if [[ -z "${address}" ]]; then
-      address="$(primary_kubectl -n "${NETWORK_NAMESPACE}" get service "${NETWORK_NAME}-ws" \
+      address="$(primary_kubectl -n "${NETWORK_NAMESPACE}" get service "${NETWORK_NAME}-tcp" \
         -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
     fi
     if [[ -n "${address}" ]]; then
@@ -165,7 +165,7 @@ wait_for_websocket_address() {
       return 0
     fi
     if (( SECONDS >= deadline )); then
-      echo "Timed out waiting for service/${NETWORK_NAME}-ws to receive an external address" >&2
+      echo "Timed out waiting for service/${NETWORK_NAME}-tcp to receive an external address" >&2
       return 1
     fi
     sleep 5
@@ -222,7 +222,7 @@ peer_kubectl -n "${NETWORK_NAMESPACE}" wait --for=condition=Ready \
 echo "Applying secured primary and peer NDN networks"
 primary_kubectl -n "${NETWORK_NAMESPACE}" apply -f "${ROOT_DIR}/examples/secure/network.yaml"
 primary_kubectl -n "${NETWORK_NAMESPACE}" patch network "${NETWORK_NAME}" --type merge \
-  --patch "{\"spec\":{\"ipFamily\":\"IPv6\",\"operator\":{\"image\":\"${OPERATOR_IMAGE}\"},\"trustAnchors\":[{\"name\":\"${PRIMARY_ROOT_NAME}\",\"kind\":\"Certificate\"},{\"name\":\"peer-root\",\"kind\":\"ExternalCertificate\"}],\"faces\":{\"websocket\":{\"port\":9696,\"serviceTemplate\":{\"spec\":{\"type\":\"LoadBalancer\"}}}}}}"
+  --patch "{\"spec\":{\"ipFamily\":\"IPv6\",\"operator\":{\"image\":\"${OPERATOR_IMAGE}\"},\"trustAnchors\":[{\"name\":\"${PRIMARY_ROOT_NAME}\",\"kind\":\"Certificate\"},{\"name\":\"peer-root\",\"kind\":\"ExternalCertificate\"}],\"faces\":{\"tcp\":{\"port\":6363,\"serviceTemplate\":{\"spec\":{\"type\":\"LoadBalancer\"}}}}}}"
 peer_kubectl -n "${NETWORK_NAMESPACE}" apply \
   -f "${ROOT_DIR}/hack/integration/fixtures/peer-network.yaml"
 peer_kubectl -n "${NETWORK_NAMESPACE}" patch network "${PEER_NETWORK_NAME}" --type merge \
@@ -246,14 +246,14 @@ primary_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Complete job/tes
 primary_logs="$(primary_kubectl -n "${WORKLOAD_NAMESPACE}" logs job/test-ping)"
 assert_ping_received_data "Primary" "${primary_logs}"
 
-echo "Waiting for the primary public WebSocket face"
-ws_address="$(wait_for_websocket_address)"
-ws_host="${ws_address}"
-if [[ "${ws_host}" == *:* && "${ws_host}" != \[*\] ]]; then
-  ws_host="[${ws_host}]"
+echo "Waiting for the primary public TCP face"
+tcp_address="$(wait_for_tcp_address)"
+tcp_host="${tcp_address}"
+if [[ "${tcp_host}" == *:* && "${tcp_host}" != \[*\] ]]; then
+  tcp_host="[${tcp_host}]"
 fi
-ws_uri="ws://${ws_host}:9696"
-echo "Connecting peer network to ${ws_uri}"
+tcp_uri="tcp://${tcp_host}:6363"
+echo "Connecting peer network to ${tcp_uri}"
 peer_kubectl -n "${NETWORK_NAMESPACE}" apply -f - <<EOF
 apiVersion: named-data.net/v1alpha1
 kind: Neighbor
@@ -261,11 +261,11 @@ metadata:
   name: to-test
 spec:
   network: ${PEER_NETWORK_NAME}
-  uri: "${ws_uri}"
+  uri: "${tcp_uri}"
 EOF
 
 echo "Waiting for the peer router to receive the external neighbor"
-wait_for_peer_outer_neighbor "${ws_uri}"
+wait_for_peer_outer_neighbor "${tcp_uri}"
 
 echo "Applying cross-cluster consumer"
 peer_kubectl -n "${WORKLOAD_NAMESPACE}" apply \

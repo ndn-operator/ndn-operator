@@ -1,10 +1,10 @@
 apiVersion: named-data.net/v1alpha1
 kind: Network
 metadata:
-  name: test2
+  name: test
   namespace: mynetwork
 spec:
-  prefix: /test2
+  prefix: /test
   udpUnicastPort: 6363
   ndnd:
     image: ghcr.io/named-data/ndnd:1.5.2
@@ -18,9 +18,3 @@ spec:
     kind: ExternalCertificate
   - name: test2-root
     kind: Certificate
-  faces:
-    websocket:
-      port: 9696
-      serviceTemplate:
-        spec:
-          type: ClusterIP

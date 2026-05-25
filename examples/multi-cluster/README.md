@@ -1,12 +1,13 @@
-# WebSocket multi-cluster example
+# TCP multi-cluster example
 
-This example connects two independently secured NDN networks through a public
-WebSocket face exposed by cluster 1. Cluster 2 enables WebSocket behind an
-internal `ClusterIP` service only, because `ndnd` needs that transport enabled
-to initiate its outbound Neighbor link. Each cluster creates its own local root
-certificate; only the public root certificate is imported into the other
-cluster. Run the following commands from this directory after installing the
-operator in both clusters.
+This example extends one secured NDN routing domain across two clusters through
+a public TCP face exposed by cluster 1. The `Network` resource is named `test`
+in both clusters because `ndnd` DV routers must use the same network name to
+exchange routes. TCP is used because the current `ndnd` forwarder can create
+outbound DV links for TCP faces; its WebSocket and HTTP/3 support is
+listener-only. Each cluster creates its own local root certificate; only the
+public root certificate is imported into the other cluster. Run the following
+commands from this directory after installing the operator in both clusters.
 
 Create the namespace and local roots in both clusters:
 
@@ -36,14 +37,14 @@ kubectl --context cluster-1 apply -f cluster-1/network-1.yaml
 kubectl --context cluster-2 apply -f cluster-2/network-2.yaml
 ```
 
-When the WebSocket LoadBalancer has an external IPv4 address, substitute it
+When the TCP LoadBalancer has an external IPv4 address, substitute it
 into the cluster 2 Neighbor manifest and apply it:
 
 ```shell
-address="$(kubectl --context cluster-1 -n mynetwork get service test1-ws -o jsonpath='{.status.loadBalancer.ingress[0].ip}')"
+address="$(kubectl --context cluster-1 -n mynetwork get service test-tcp -o jsonpath='{.status.loadBalancer.ingress[0].ip}')"
 sed "s/<address>/${address}/" cluster-2/neighbor-2.yaml | kubectl --context cluster-2 apply -f -
 ```
 
-Cluster 2 can now learn routes exposed by cluster 1 over the WebSocket link.
-Only cluster 1 publishes a public WebSocket endpoint; cluster 2's `test2-ws`
-service remains internal to its cluster.
+Cluster 2 can now learn routes exposed by cluster 1 over the TCP link within
+the shared `/test` routing domain. Only cluster 1 publishes a public
+cross-cluster endpoint.

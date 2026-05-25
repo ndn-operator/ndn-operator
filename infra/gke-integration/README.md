@@ -6,11 +6,13 @@ isolated IPv4 peer cluster defaults to `us-south1-a` in its own VPC. Both
 clusters keep the control plane public, but limit access with master authorized
 networks to the current GitHub runner IP.
 
-The data-path test exposes a WebSocket face through a public LoadBalancer in the
+The data-path test exposes a TCP face through a public LoadBalancer in the
 primary cluster. The peer cluster reaches that endpoint over its own Cloud NAT,
-so there is no VPC peering or private cross-region connectivity. The peer
-enables WebSocket behind an internal `ClusterIP` service only, allowing its
-outbound `Neighbor` link without publishing a second public endpoint.
+so there is no VPC peering or private cross-region connectivity. TCP is used
+because the current `ndnd` runtime supports outbound DV link creation for TCP;
+WebSocket and HTTP/3 support is listener-only.
+Both clusters instantiate `Network/test`, because DV route exchange requires
+the same routing-domain name on each router.
 
 The workflow runs when a trusted pull request has the `run-gke-integration`
 label.

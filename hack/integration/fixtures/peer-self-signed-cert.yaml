@@ -3,7 +3,7 @@ kind: Certificate
 metadata:
   name: peer-root
 spec:
-  prefix: /peer
+  prefix: /test
   issuer:
     name: peer-root
     kind: Certificate
