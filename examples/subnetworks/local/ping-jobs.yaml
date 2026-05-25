@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: subnetwork1-to-subnetwork2-ping
+  namespace: mynetwork
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      annotations:
+        networks.named-data.net/name: subnetwork1
+        networks.named-data.net/namespace: mynetwork
+      labels:
+        named-data.net/inject: "true"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: ping
+        image: ghcr.io/named-data/ndnd:1.5.2
+        command: ["/ndnd", "ping"]
+        args: ["/root-network/subnetwork2/pingserver", "--interval", "1000", "--count", "20"]
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: subnetwork2-to-subnetwork1-ping
+  namespace: mynetwork
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      annotations:
+        networks.named-data.net/name: subnetwork2
+        networks.named-data.net/namespace: mynetwork
+      labels:
+        named-data.net/inject: "true"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: ping
+        image: ghcr.io/named-data/ndnd:1.5.2
+        command: ["/ndnd", "ping"]
+        args: ["/root-network/subnetwork1/pingserver", "--interval", "1000", "--count", "20"]
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi

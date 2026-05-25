@@ -1,0 +1,25 @@
+apiVersion: named-data.net/v1alpha1
+kind: Certificate
+metadata:
+  name: subnetwork1-root
+  namespace: mynetwork
+spec:
+  prefix: /root-network
+  issuer:
+    name: subnetwork1-root
+    kind: Certificate
+  renewBefore: 23h50m
+  renewInterval: 4d15h
+---
+apiVersion: named-data.net/v1alpha1
+kind: Certificate
+metadata:
+  name: subnetwork2-root
+  namespace: mynetwork
+spec:
+  prefix: /root-network
+  issuer:
+    name: subnetwork2-root
+    kind: Certificate
+  renewBefore: 23h50m
+  renewInterval: 4d15h

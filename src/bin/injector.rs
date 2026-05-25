@@ -218,3 +218,34 @@ fn create_env_var_prefix(network: &Network) -> EnvVar {
         ..EnvVar::default()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use operator::network_controller::{IpFamily, NdndSpec, NetworkSpec};
+
+    #[test]
+    fn injected_prefix_remains_the_application_prefix() {
+        let network = Network::new(
+            "subnetwork1",
+            NetworkSpec {
+                prefix: "/root-network/subnetwork1".into(),
+                dv_network: Some("/root-network".into()),
+                udp_unicast_port: 6363,
+                ip_family: IpFamily::IPv4,
+                node_selector: None,
+                template: None,
+                ndnd: NdndSpec::default(),
+                operator: None,
+                router_cert_issuer: None,
+                trust_anchors: None,
+                faces: None,
+            },
+        );
+
+        assert_eq!(
+            create_env_var_prefix(&network).value.as_deref(),
+            Some("/root-network/subnetwork1")
+        );
+    }
+}

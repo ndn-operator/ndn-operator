@@ -1,0 +1,45 @@
+apiVersion: named-data.net/v1alpha1
+kind: Network
+metadata:
+  name: subnetwork1
+  namespace: mynetwork
+spec:
+  prefix: /root-network/subnetwork1
+  dvNetwork: /root-network
+  udpUnicastPort: 6363
+  ndnd:
+    image: ghcr.io/named-data/ndnd:1.5.2
+  routerCertIssuer:
+    kind: Certificate
+    name: subnetwork1-root
+  trustAnchors:
+  - name: subnetwork1-root
+    kind: Certificate
+  - name: subnetwork2-root
+    kind: Certificate
+  faces:
+    tcp:
+      port: 16363
+      serviceTemplate:
+        spec:
+          type: ClusterIP
+---
+apiVersion: named-data.net/v1alpha1
+kind: Network
+metadata:
+  name: subnetwork2
+  namespace: mynetwork
+spec:
+  prefix: /root-network/subnetwork2
+  dvNetwork: /root-network
+  udpUnicastPort: 6364
+  ndnd:
+    image: ghcr.io/named-data/ndnd:1.5.2
+  routerCertIssuer:
+    kind: Certificate
+    name: subnetwork2-root
+  trustAnchors:
+  - name: subnetwork1-root
+    kind: Certificate
+  - name: subnetwork2-root
+    kind: Certificate
