@@ -3,7 +3,6 @@ kind: ExternalCertificate
 metadata:
   name: app-root
 spec:
-  prefix: /root-network
   secretName: app-root
 ---
 apiVersion: named-data.net/v1alpha1
@@ -11,7 +10,6 @@ kind: ExternalCertificate
 metadata:
   name: app-subnetwork1-ca
 spec:
-  prefix: /root-network/subnetwork1
   secretName: app-subnetwork1-ca
 ---
 apiVersion: named-data.net/v1alpha1
@@ -19,7 +17,6 @@ kind: ExternalCertificate
 metadata:
   name: app-subnetwork1-helloworld
 spec:
-  prefix: /root-network/subnetwork1/helloworld
   secretName: app-subnetwork1-helloworld
 ---
 apiVersion: named-data.net/v1alpha1
@@ -27,7 +24,6 @@ kind: ExternalCertificate
 metadata:
   name: app-subnetwork2-ca
 spec:
-  prefix: /root-network/subnetwork2
   secretName: app-subnetwork2-ca
 ---
 apiVersion: named-data.net/v1alpha1
@@ -35,5 +31,4 @@ kind: ExternalCertificate
 metadata:
   name: app-subnetwork2-helloworld
 spec:
-  prefix: /root-network/subnetwork2/helloworld
   secretName: app-subnetwork2-helloworld
