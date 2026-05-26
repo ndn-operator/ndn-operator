@@ -3,7 +3,8 @@ on:
   pull_request:
     branches:
     - main
-    - release/*
+    - release
+    - pre-release
     paths-ignore:
     - README.md
     - docs/**

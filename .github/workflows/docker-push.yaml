@@ -1,10 +1,5 @@
-name: Build and Push Docker Image
+name: Build PR Docker Image
 on:
-  push:
-    tags:
-    - v*
-    paths-ignore:
-    - README.md
   pull_request:
     types:
     - opened
@@ -14,7 +9,8 @@ on:
     - labeled
     branches:
     - main
-    - release/*
+    - release
+    - pre-release
     paths-ignore:
     - README.md
 env:
@@ -24,26 +20,13 @@ jobs:
   version:
     runs-on: ubuntu-24.04
     outputs:
-      sha_short: ${{ steps.sha_short.outputs.sha_short }}
-      version: ${{ steps.version_tag.outputs.version || steps.read_toml_version.outputs.value }}
+      version: ${{ steps.read_toml_version.outputs.value }}+${{ steps.sha_short.outputs.sha_short }}
     permissions:
       contents: read
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
-    - name: Dump GitHub context
-      env:
-        GITHUB_CONTEXT: ${{ toJson(github) }}
-      run: jq <<< "$GITHUB_CONTEXT"
-    - name: Get the version tag
-      id: version_tag
-      if: github.ref_type == 'tag'
-      env:
-        REF_NAME: "${{ github.ref_name }}"
-      run: |
-        echo "version=${REF_NAME#v}" >> $GITHUB_OUTPUT
     - uses: SebRollen/toml-action@v1.2.0
-      if: github.ref_type == 'branch'
       id: read_toml_version
       with:
         file: Cargo.toml
@@ -67,13 +50,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
-    - name: Update Cargo.toml
-      uses: colathro/toml-editor@1.1.1
-      if: github.event_name == 'push'
-      with:
-        file: Cargo.toml
-        key: package.version
-        value: ${{ needs.version.outputs.version }}+${{ needs.version.outputs.sha_short }}
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v4
       with:
@@ -98,6 +74,7 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           TARGET=x86_64-unknown-linux-musl
+          VERSION=${{ needs.version.outputs.version }}
         platforms: linux/amd64
         cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-cache
         cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-cache,mode=max
@@ -120,13 +97,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
-    - name: Update Cargo.toml
-      uses: colathro/toml-editor@1.1.1
-      if: github.event_name == 'push'
-      with:
-        file: Cargo.toml
-        key: package.version
-        value: ${{ needs.version.outputs.version }}+${{ needs.version.outputs.sha_short }}
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v4
       with:
@@ -140,7 +110,7 @@ jobs:
       uses: docker/metadata-action@v6
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        flavor: latest=false,suffix=
+        flavor: latest=false,suffix=-arm64
     - name: Build and push Docker image
       id: push
       uses: docker/build-push-action@v7
@@ -151,6 +121,7 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           TARGET=aarch64-unknown-linux-musl
+          VERSION=${{ needs.version.outputs.version }}
         platforms: linux/arm64
         cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-cache
         cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-cache,mode=max
@@ -182,11 +153,7 @@ jobs:
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
-          type=ref,event=branch
           type=ref,event=pr
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=semver,pattern={{major}}
           type=sha
     - uses: int128/docker-manifest-create-action@v2
       id: manifest

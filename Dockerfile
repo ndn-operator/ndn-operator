@@ -1,13 +1,17 @@
 FROM clux/muslrust:stable AS builder
 ARG TARGET
+ARG VERSION
 
 WORKDIR /usr/src/app
 
 COPY src src
 COPY operator-derive operator-derive
 COPY Cargo.toml Cargo.toml
+COPY Cargo.lock Cargo.lock
 
-RUN cargo build --target=${TARGET} --release
+RUN cargo install cargo-edit --locked
+RUN cargo set-version "${VERSION}"
+RUN cargo build --target=${TARGET} --release --locked --bins
 
 FROM ghcr.io/named-data/ndnd:1.5.2 AS ndnd
 
