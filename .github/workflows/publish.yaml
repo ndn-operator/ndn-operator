@@ -1,0 +1,208 @@
+name: Publish release image and chart
+
+on:
+  push:
+    tags:
+    - v*
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+    steps:
+    - uses: actions/checkout@v6
+    - uses: dtolnay/rust-toolchain@stable
+    - run: cargo test --all --locked
+    - name: Extract version from tag
+      id: metadata
+      run: |
+        set -euo pipefail
+        TAG="${GITHUB_REF#refs/tags/}"
+        VERSION="${TAG#v}"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        if [[ "$VERSION" == *-* ]]; then
+          echo "prerelease=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "prerelease=false" >> "$GITHUB_OUTPUT"
+        fi
+
+  build-amd64:
+    needs: test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+    - uses: actions/checkout@v6
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v4
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+    - name: Docker metadata
+      id: meta
+      uses: docker/metadata-action@v6
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        flavor: latest=false,suffix=-amd64
+        tags: type=ref,event=tag
+    - name: Build and push amd64 image
+      id: push
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        push: true
+        build-args: |
+          TARGET=x86_64-unknown-linux-musl
+          VERSION=${{ needs.test.outputs.version }}
+        platforms: linux/amd64
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-cache
+        cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-cache,mode=max
+    - name: Generate amd64 provenance
+      uses: actions/attest-build-provenance@v4
+      with:
+        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        subject-digest: ${{ steps.push.outputs.digest }}
+        push-to-registry: true
+
+  build-arm64:
+    needs: test
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+    - uses: actions/checkout@v6
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v4
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+    - name: Docker metadata
+      id: meta
+      uses: docker/metadata-action@v6
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        flavor: latest=false,suffix=-arm64
+        tags: type=ref,event=tag
+    - name: Build and push arm64 image
+      id: push
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        push: true
+        build-args: |
+          TARGET=aarch64-unknown-linux-musl
+          VERSION=${{ needs.test.outputs.version }}
+        platforms: linux/arm64
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-cache
+        cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-cache,mode=max
+    - name: Generate arm64 provenance
+      uses: actions/attest-build-provenance@v4
+      with:
+        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        subject-digest: ${{ steps.push.outputs.digest }}
+        push-to-registry: true
+
+  manifest:
+    needs:
+    - build-amd64
+    - build-arm64
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v4
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Docker metadata
+      id: meta
+      uses: docker/metadata-action@v6
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha
+    - name: Publish multi-architecture manifest
+      id: manifest
+      uses: int128/docker-manifest-create-action@v2
+      with:
+        index-annotations: ${{ steps.meta.outputs.labels }}
+        tags: ${{ steps.meta.outputs.tags }}
+        sources: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-amd64.outputs.digest }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-arm64.outputs.digest }}
+    - name: Generate manifest provenance
+      uses: actions/attest-build-provenance@v4
+      with:
+        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        subject-digest: ${{ steps.manifest.outputs.digest }}
+        push-to-registry: true
+
+  helm:
+    needs:
+    - test
+    - manifest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout tagged source
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+    - name: Stamp chart version
+      uses: rmeneely/update-yaml@v1
+      with:
+        infile: charts/ndn-operator/Chart.yaml
+        varlist: version=${{ needs.test.outputs.version }},appVersion=${{ needs.test.outputs.version }}
+    - name: Stamp chart image tag
+      uses: rmeneely/update-yaml@v1
+      with:
+        infile: charts/ndn-operator/values.yaml
+        varlist: image.tag=${{ needs.test.outputs.version }}
+    - name: Configure Git
+      run: |
+        git config user.name "$GITHUB_ACTOR"
+        git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+    - name: Run chart-releaser
+      uses: helm/chart-releaser-action@v1.7.0
+      with:
+        skip_existing: true
+        mark_as_latest: ${{ needs.test.outputs.prerelease != 'true' }}
+      env:
+        CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"

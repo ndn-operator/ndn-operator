@@ -1,0 +1,96 @@
+name: Tag release
+
+on:
+  push:
+    branches:
+    - release
+    - pre-release
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Generate NDN Operator Releaser token
+      id: generate-token
+      uses: actions/create-github-app-token@v3
+      with:
+        app-id: ${{ vars.RELEASER_APP_ID }}
+        private-key: ${{ secrets.RELEASER_PRIVATE_KEY }}
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+        token: ${{ steps.generate-token.outputs.token }}
+    - name: Verify HEAD is a merge commit
+      run: |
+        set -euo pipefail
+        if ! git rev-parse --verify HEAD^2 >/dev/null 2>&1; then
+          echo "::error::HEAD has no second parent. The release branch must be updated via a non-fast-forward merge commit (squash and rebase merges are not supported)."
+          exit 1
+        fi
+        TAG_TARGET=$(git rev-parse HEAD^2)
+        echo "TAG_TARGET=$TAG_TARGET" >> "$GITHUB_ENV"
+        echo "Tagging $TAG_TARGET (HEAD^2 of merge commit $(git rev-parse HEAD))"
+    - name: Install svu
+      run: |
+        set -euo pipefail
+        SVU_VERSION="3.4.0"
+        curl -fsSL "https://github.com/caarlos0/svu/releases/download/v${SVU_VERSION}/svu_${SVU_VERSION}_linux_amd64.tar.gz" \
+          | sudo tar -xz -C /usr/local/bin svu
+        svu --version
+    - name: Skip if target already tagged for this channel
+      run: |
+        set -euo pipefail
+        if [[ "${GITHUB_REF_NAME}" == "pre-release" ]]; then
+          existing=$(git tag --points-at "$TAG_TARGET" --list 'v*-rc.*' | head -n 1)
+        else
+          existing=$(git tag --points-at "$TAG_TARGET" --list 'v*' | grep -Ev -- '-' | head -n 1 || true)
+        fi
+        if [[ -n "$existing" ]]; then
+          echo "::notice::Target commit already has release tag $existing for ${GITHUB_REF_NAME}; nothing to do."
+          echo "SKIP=1" >> "$GITHUB_ENV"
+        fi
+    - name: Compute next version
+      if: env.SKIP != '1'
+      run: |
+        set -euo pipefail
+        git -c advice.detachedHead=false checkout "$TAG_TARGET"
+        if [[ "${GITHUB_REF_NAME}" == "pre-release" ]]; then
+          VERSION=$(svu prerelease --tag.mode all --tag.pattern 'v*' --prerelease rc)
+          # svu starts a new prerelease series at rc.0; published operator RCs start at rc.1.
+          if [[ "$VERSION" == *-rc.0 ]]; then
+            VERSION="${VERSION%.0}.1"
+          fi
+        else
+          VERSION=$(svu next --tag.mode all --tag.pattern 'v*')
+        fi
+        echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+        echo "Computed version: $VERSION"
+    - name: Skip if tag already exists
+      if: env.SKIP != '1'
+      run: |
+        set -euo pipefail
+        if git rev-parse --verify "refs/tags/$VERSION" >/dev/null 2>&1; then
+          echo "::notice::Tag $VERSION already exists; nothing to do."
+          echo "SKIP=1" >> "$GITHUB_ENV"
+        fi
+    - name: Configure git identity
+      if: env.SKIP != '1'
+      run: |
+        git config user.name "ndn-operator-releaser[bot]"
+        git config user.email "ndn-operator-releaser[bot]@users.noreply.github.com"
+    - name: Create and push annotated tag
+      if: env.SKIP != '1'
+      run: |
+        set -euo pipefail
+        if [[ "${GITHUB_REF_NAME}" == "pre-release" ]]; then
+          message="Pre-release $VERSION"
+        else
+          message="Release $VERSION"
+        fi
+        git tag -a "$VERSION" "$TAG_TARGET" -m "$message"
+        git push origin "$VERSION"
