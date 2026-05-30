@@ -135,6 +135,27 @@ assert_rejected_data() {
   fi
 }
 
+logs_for_succeeded_job() {
+  local kubeconfig="$1"
+  local namespace="$2"
+  local job_name="$3"
+  local pod_name
+
+  pod_name="$(kubectl --kubeconfig "${kubeconfig}" -n "${namespace}" get pods \
+    -l "batch.kubernetes.io/job-name=${job_name}" \
+    --field-selector=status.phase=Succeeded \
+    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
+    | sed -n '1p')"
+  if [[ -z "${pod_name}" ]]; then
+    echo "No succeeded pod found for job/${job_name}" >&2
+    kubectl --kubeconfig "${kubeconfig}" -n "${namespace}" get pods \
+      -l "batch.kubernetes.io/job-name=${job_name}" -o wide >&2
+    return 1
+  fi
+
+  kubectl --kubeconfig "${kubeconfig}" -n "${namespace}" logs "pod/${pod_name}"
+}
+
 wait_for_network_rollout() {
   local kubeconfig="$1"
   local network_name="$2"
@@ -300,7 +321,7 @@ primary_kubectl -n "${WORKLOAD_NAMESPACE}" apply -f "${ROOT_DIR}/examples/worklo
 primary_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Ready pod/test-helloworld-producer --timeout=5m
 primary_kubectl -n "${WORKLOAD_NAMESPACE}" apply -f "${ROOT_DIR}/examples/workloads/consumer-job.yaml"
 primary_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Complete job/test-helloworld-consumer --timeout=6m
-primary_logs="$(primary_kubectl -n "${WORKLOAD_NAMESPACE}" logs job/test-helloworld-consumer)"
+primary_logs="$(logs_for_succeeded_job "${PRIMARY_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "test-helloworld-consumer")"
 assert_verified_data "Primary" "${primary_logs}"
 
 echo "Waiting for the primary public TCP face"
@@ -328,7 +349,7 @@ echo "Applying cross-cluster validating consumer"
 peer_kubectl -n "${WORKLOAD_NAMESPACE}" apply \
   -f "${ROOT_DIR}/hack/integration/fixtures/peer-consumer-job.yaml"
 peer_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Complete job/peer-helloworld-consumer --timeout=6m
-peer_logs="$(peer_kubectl -n "${WORKLOAD_NAMESPACE}" logs job/peer-helloworld-consumer)"
+peer_logs="$(logs_for_succeeded_job "${PEER_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "peer-helloworld-consumer")"
 assert_verified_data "Peer" "${peer_logs}"
 
 echo "Applying peer sibling-prefix impersonation attempt"
@@ -338,5 +359,5 @@ peer_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Ready pod/peer-hell
 peer_kubectl -n "${WORKLOAD_NAMESPACE}" apply \
   -f "${ROOT_DIR}/hack/integration/fixtures/peer-rejection-job.yaml"
 peer_kubectl -n "${WORKLOAD_NAMESPACE}" wait --for=condition=Complete job/peer-rejects-sibling-forgery --timeout=6m
-rejection_logs="$(peer_kubectl -n "${WORKLOAD_NAMESPACE}" logs job/peer-rejects-sibling-forgery)"
+rejection_logs="$(logs_for_succeeded_job "${PEER_KUBECONFIG}" "${WORKLOAD_NAMESPACE}" "peer-rejects-sibling-forgery")"
 assert_rejected_data "Peer" "${rejection_logs}"
