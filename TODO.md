@@ -28,7 +28,7 @@ ownership: a peer in the shared DV domain can still advertise a sibling prefix
 and disrupt reachability even when it cannot produce acceptable signed Data.
 
 The integration manifests use the published application image
-`ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0`.
+`ghcr.io/ndn-operator/ndn-helloworld-rs:latest`.
 
 ### References
 

@@ -18,7 +18,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: consumer
-        image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
+        image: ghcr.io/ndn-operator/ndn-helloworld-rs:latest
         command: ["/consumer"]
         args: ["--expect-reject", "--name", "/root-network/subnetwork1/helloworld/forged"]
         imagePullPolicy: IfNotPresent
