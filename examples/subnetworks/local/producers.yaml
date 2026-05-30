@@ -13,7 +13,7 @@ metadata:
 spec:
   containers:
   - name: producer
-    image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
+    image: ghcr.io/ndn-operator/ndn-helloworld-rs:latest
     command: ["/producer"]
     args: ["--name", "/root-network/subnetwork1/helloworld/valid"]
     imagePullPolicy: IfNotPresent
@@ -40,7 +40,7 @@ metadata:
 spec:
   containers:
   - name: producer
-    image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
+    image: ghcr.io/ndn-operator/ndn-helloworld-rs:latest
     command: ["/producer"]
     args: ["--name", "/root-network/subnetwork2/helloworld/valid"]
     imagePullPolicy: IfNotPresent
@@ -67,7 +67,7 @@ metadata:
 spec:
   containers:
   - name: producer
-    image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
+    image: ghcr.io/ndn-operator/ndn-helloworld-rs:latest
     command: ["/producer"]
     args: ["--name", "/root-network/subnetwork1/helloworld/forged"]
     imagePullPolicy: IfNotPresent

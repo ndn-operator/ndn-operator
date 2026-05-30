@@ -19,7 +19,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: consumer
-        image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
+        image: ghcr.io/ndn-operator/ndn-helloworld-rs:latest
         command: ["/consumer"]
         args: ["--name", "/root-network/subnetwork1/helloworld/valid"]
         imagePullPolicy: IfNotPresent
@@ -52,7 +52,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: consumer
-        image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
+        image: ghcr.io/ndn-operator/ndn-helloworld-rs:latest
         command: ["/consumer"]
         args: ["--name", "/root-network/subnetwork2/helloworld/valid"]
         imagePullPolicy: IfNotPresent
@@ -85,7 +85,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: consumer
-        image: ghcr.io/ndn-operator/ndn-helloworld-rs:0.1.0
+        image: ghcr.io/ndn-operator/ndn-helloworld-rs:latest
         command: ["/consumer"]
         args:
         - "--expect-reject"
