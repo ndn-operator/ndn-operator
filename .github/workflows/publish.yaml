@@ -18,7 +18,7 @@ jobs:
       version: ${{ steps.metadata.outputs.version }}
       prerelease: ${{ steps.metadata.outputs.prerelease }}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: dtolnay/rust-toolchain@stable
     - run: cargo test --all --locked
     - name: Extract version from tag
@@ -45,7 +45,7 @@ jobs:
     outputs:
       digest: ${{ steps.push.outputs.digest }}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v4
       with:
@@ -93,7 +93,7 @@ jobs:
     outputs:
       digest: ${{ steps.push.outputs.digest }}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v4
       with:
@@ -181,7 +181,7 @@ jobs:
       contents: write
     steps:
     - name: Checkout tagged source
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         fetch-depth: 0
         fetch-tags: true
