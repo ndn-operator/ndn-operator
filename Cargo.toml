@@ -5,6 +5,9 @@ edition = "2024"
 license = "Apache-2.0"
 default-run = "ndnctl"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(tarpaulin)"] }
+
 [lib]
 name = "operator"
 path = "src/lib.rs"

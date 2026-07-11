@@ -85,12 +85,14 @@ pub trait Conditions {
 macro_rules! impl_conditions {
     ($ty:ty) => {
         impl $crate::conditions::Conditions for $ty {
+            #[cfg_attr(tarpaulin, skip)]
             fn conditions(
                 &self,
             ) -> &Option<Vec<k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition>> {
                 &self.conditions
             }
 
+            #[cfg_attr(tarpaulin, skip)]
             fn conditions_mut(
                 &mut self,
             ) -> &mut Option<Vec<k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition>> {
