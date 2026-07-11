@@ -110,6 +110,11 @@ mod tests {
         conds: Option<Vec<K8sCondition>>,
     }
 
+    struct MacroConditions {
+        conditions: Option<Vec<K8sCondition>>,
+    }
+    crate::impl_conditions!(MacroConditions);
+
     impl Conditions for DummyConditions {
         fn conditions(&self) -> &Option<Vec<K8sCondition>> {
             &self.conds
@@ -118,6 +123,14 @@ mod tests {
         fn conditions_mut(&mut self) -> &mut Option<Vec<K8sCondition>> {
             &mut self.conds
         }
+    }
+
+    #[test]
+    fn impl_conditions_macro_exposes_condition_field() {
+        let mut value = MacroConditions { conditions: None };
+        assert!(value.conditions().is_none());
+        value.conditions_mut().replace(Vec::new());
+        assert_eq!(value.conditions().as_ref().unwrap().len(), 0);
     }
 
     #[test]
