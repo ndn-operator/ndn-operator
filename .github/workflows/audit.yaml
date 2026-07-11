@@ -8,13 +8,6 @@ permissions:
   issues: write
   checks: write
 jobs:
-  security_audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: rustsec/audit-check@v2.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
   cargo-deny:
     runs-on: ubuntu-22.04
     strategy:
@@ -29,4 +22,3 @@ jobs:
     - uses: EmbarkStudios/cargo-deny-action@v2
       with:
         command: check ${{ matrix.checks }}
-

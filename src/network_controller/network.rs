@@ -2,11 +2,8 @@ use super::Context;
 use crate::conditions::Conditions;
 use crate::{
     Error, Result,
-    cert_controller::{
-        Certificate, CertificateSpec, ExternalCertificate, IssuerRef, is_cert_valid,
-    },
+    cert_controller::{Certificate, CertificateSpec, IssuerRef},
     events_helper::emit_info,
-    ext_cert_controller::is_external_cert_valid,
     helper::get_my_image,
     router_controller::{CertificateRef, Router, RouterSpec},
 };
@@ -21,21 +18,18 @@ use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::ObjectMeta,
 };
 use kube::{
-    Client, CustomResource, Resource,
+    CustomResource, Resource,
     api::{Api, Patch, PatchParams, ResourceExt},
     runtime::{
         controller::Action,
         events::{Event, EventType},
-        wait::await_condition,
     },
 };
-use operator_derive::Conditions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::skip_serializing_none;
 use std::{collections::BTreeMap, sync::Arc, time::Duration as StdDuration};
-use tracing::*;
 
 pub static NETWORK_FINALIZER: &str = "network.named-data.net/finalizer";
 pub static NETWORK_MANAGER_NAME: &str = "network-controller";
@@ -125,66 +119,6 @@ pub struct TrustAnchorRef {
     /// The namespace of the trust anchor.
     /// If not specified, the network's namespace will be used
     pub namespace: Option<String>,
-}
-
-impl TrustAnchorRef {
-    pub async fn get_cert_name(&self, client: &Client, default_ns: &str) -> Result<String> {
-        match self.kind.as_str() {
-            "Certificate" => {
-                let api_cert = Api::<Certificate>::namespaced(
-                    client.clone(),
-                    &self.namespace.clone().unwrap_or(default_ns.to_string()),
-                );
-                info!("Waiting for the router certificate to be valid...");
-                let cert_valid = await_condition(api_cert.clone(), &self.name, is_cert_valid());
-                let _ = tokio::time::timeout(std::time::Duration::from_secs(3), cert_valid)
-                    .await
-                    .map_err(|e| {
-                        Error::OtherError(format!(
-                            "Timeout while waiting for certificate to be valid: {e}"
-                        ))
-                    })?;
-                let cert = api_cert
-                    .get_status(&self.name)
-                    .await
-                    .map_err(Error::KubeError)?;
-                cert.status
-                    .and_then(|s| s.cert.name)
-                    .ok_or(Error::OtherError(
-                        "Certificate name not found in status".to_string(),
-                    ))
-            }
-            "ExternalCertificate" => {
-                let api_cert = Api::<ExternalCertificate>::namespaced(
-                    client.clone(),
-                    &self.namespace.clone().unwrap_or(default_ns.to_string()),
-                );
-                info!("Waiting for the external certificate to be valid...");
-                let cert_valid =
-                    await_condition(api_cert.clone(), &self.name, is_external_cert_valid());
-                let _ = tokio::time::timeout(std::time::Duration::from_secs(3), cert_valid)
-                    .await
-                    .map_err(|e| {
-                        Error::OtherError(format!(
-                            "Timeout while waiting for external certificate to be valid: {e}"
-                        ))
-                    })?;
-                let cert = api_cert
-                    .get_status(&self.name)
-                    .await
-                    .map_err(Error::KubeError)?;
-                cert.status
-                    .and_then(|s| s.cert.name)
-                    .ok_or(Error::OtherError(
-                        "ExternalCertificate name not found in status".to_string(),
-                    ))
-            }
-            _ => Err(Error::OtherError(format!(
-                "Unsupported trust anchor kind: {}",
-                self.kind
-            ))),
-        }
-    }
 }
 
 #[skip_serializing_none]
@@ -318,7 +252,7 @@ impl Default for OperatorSpec {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, Conditions)]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkStatus {
     /// Indicates whether the DaemonSet for the network has been created
@@ -329,6 +263,7 @@ pub struct NetworkStatus {
     /// - RBACReady: ServiceAccount, Role, RoleBinding successfully applied
     pub conditions: Option<Vec<K8sCondition>>,
 }
+crate::impl_conditions!(NetworkStatus);
 
 impl Network {
     /// Resolve the ndn-dv routing domain for this network.

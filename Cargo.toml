@@ -30,7 +30,6 @@ name = "injector"
 path = "src/bin/injector.rs"
 
 [dependencies]
-operator-derive = { path = "operator-derive", version = "0.1.0" }
 actix-web = { version = "4.13.0", features = ["rustls-0_23"] }
 anyhow = "1.0.102"
 duration-string = { version = "0.5.3", features = ["serde"] }

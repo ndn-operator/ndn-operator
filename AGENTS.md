@@ -55,8 +55,6 @@ image and all callers are changed together.
 - `src/bin/pod_sidecar.rs`: sidecar that syncs Router neighbors into `ndnd` DV
   links.
 - `src/bin/gencrd.rs`: CRD YAML generator for Helm templates.
-- `src/ndnd/`: serializable `ndnd` forwarder and DV config structures.
-- `operator-derive/`: proc macro implementing the `Conditions` derive.
 - `charts/ndn-operator/`: Helm chart, checked-in CRDs, injector webhook config,
   controller deployments.
 - `examples/`: sample Networks, Certificates, ExternalCertificates, and

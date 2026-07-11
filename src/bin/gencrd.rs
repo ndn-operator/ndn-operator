@@ -16,31 +16,18 @@ struct Args {
 }
 fn main() {
     let args = Args::parse();
-    // Create directory if it does not exist
     std::fs::create_dir_all(&args.output).unwrap();
-    std::fs::write(
-        format!("{}/network.yaml", args.output),
-        serde_yaml::to_string(&Network::crd()).unwrap(),
-    )
-    .unwrap();
-    std::fs::write(
-        format!("{}/router.yaml", args.output),
-        serde_yaml::to_string(&Router::crd()).unwrap(),
-    )
-    .unwrap();
-    std::fs::write(
-        format!("{}/certificate.yaml", args.output),
-        serde_yaml::to_string(&Certificate::crd()).unwrap(),
-    )
-    .unwrap();
-    std::fs::write(
-        format!("{}/external_certificate.yaml", args.output),
-        serde_yaml::to_string(&ExternalCertificate::crd()).unwrap(),
-    )
-    .unwrap();
-    std::fs::write(
-        format!("{}/neighbor.yaml", args.output),
-        serde_yaml::to_string(&Neighbor::crd()).unwrap(),
-    )
-    .unwrap();
+    for (file, crd) in [
+        ("network.yaml", Network::crd()),
+        ("router.yaml", Router::crd()),
+        ("certificate.yaml", Certificate::crd()),
+        ("external_certificate.yaml", ExternalCertificate::crd()),
+        ("neighbor.yaml", Neighbor::crd()),
+    ] {
+        std::fs::write(
+            format!("{}/{file}", args.output),
+            serde_yaml::to_string(&crd).unwrap(),
+        )
+        .unwrap();
+    }
 }

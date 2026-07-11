@@ -1,5 +1,4 @@
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
-pub use operator_derive::Conditions as DeriveConditions;
 
 // A trait for types that expose a Kubernetes-style `conditions` field
 pub trait Conditions {
@@ -80,6 +79,25 @@ pub trait Conditions {
             }
         }
     }
+}
+
+#[macro_export]
+macro_rules! impl_conditions {
+    ($ty:ty) => {
+        impl $crate::conditions::Conditions for $ty {
+            fn conditions(
+                &self,
+            ) -> &Option<Vec<k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition>> {
+                &self.conditions
+            }
+
+            fn conditions_mut(
+                &mut self,
+            ) -> &mut Option<Vec<k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition>> {
+                &mut self.conditions
+            }
+        }
+    };
 }
 
 #[cfg(test)]

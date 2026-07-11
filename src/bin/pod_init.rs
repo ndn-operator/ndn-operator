@@ -7,14 +7,12 @@ use kube::{
     runtime::wait::await_condition,
 };
 use operator::{
-    Error, NdndConfig,
+    Error,
     cert_controller::{
         Certificate, CertificateStatus, ExternalCertificate, ExternalCertificateStatus,
         is_cert_valid,
     },
-    dv::RouterConfig,
     ext_cert_controller::is_external_cert_valid,
-    fw::{FacesConfig, ForwarderConfig, TcpConfig, UdpConfig, UnixConfig, WebSocketConfig},
     helper::{Decoded, decode_secret},
     network_controller::{IpFamily, TrustAnchorRef},
     router_controller::{Router, is_router_created},
@@ -53,7 +51,7 @@ struct ResolvedTrustAnchor {
     cert_secret_name: String,
 }
 
-fn gen_config(params: GenConfigParams) -> NdndConfig {
+fn gen_config(params: GenConfigParams) -> serde_json::Value {
     let GenConfigParams {
         dv_network,
         router_name,
@@ -64,47 +62,79 @@ fn gen_config(params: GenConfigParams) -> NdndConfig {
         tcp_port,
         ws_port,
     } = params;
-    NdndConfig {
-        dv: RouterConfig {
-            network: dv_network.clone(),
-            router: format!("{dv_network}/{router_name}"),
-            keychain,
-            trust_anchors,
-            ..RouterConfig::default()
-        },
-        fw: ForwarderConfig {
-            faces: FacesConfig {
-                udp: Some(UdpConfig {
-                    enabled_unicast: true,
-                    port_unicast: Some(udp_unicast_port),
-                    ..UdpConfig::default()
-                }),
-                tcp: tcp_port
-                    .map(|p| TcpConfig {
-                        enabled: true,
-                        port_unicast: p,
-                        ..TcpConfig::default()
-                    })
-                    .or(Some(TcpConfig::default())), // When tcp config is absent, ndnd enables it on default port 6363, but we want to disable it explicitly
-                unix: Some(UnixConfig {
-                    enabled: true,
-                    socket_path: socket_path.unwrap_or("/run/nfd/nfd.sock".to_string()),
-                }),
-                websocket: ws_port
-                    .map(|p| WebSocketConfig {
-                        enabled: true,
-                        bind: "0.0.0.0".to_string(),
-                        port: p,
-                        tls_enabled: false,
-                        tls_cert: None,
-                        tls_key: None,
-                    })
-                    .or(Some(WebSocketConfig::default())), // When websocket config is absent, ndnd enables it on default port 9696, but we want to disable it explicitly
-                ..FacesConfig::default()
-            },
-            ..ForwarderConfig::default()
-        },
+    let router = format!("{dv_network}/{router_name}");
+    let mut dv = serde_json::json!({
+        "network": dv_network,
+        "router": router,
+        "keychain": keychain,
+    });
+    if let Some(trust_anchors) = trust_anchors {
+        dv["trust_anchors"] = serde_json::json!(trust_anchors);
     }
+
+    let tcp = match tcp_port {
+        Some(port) => serde_json::json!({
+            "enabled": true,
+            "port_unicast": port,
+            "lifetime": 600,
+            "reconnect_interval": 10,
+        }),
+        None => serde_json::json!({
+            "enabled": false,
+            "port_unicast": 6363,
+            "lifetime": 600,
+            "reconnect_interval": 10,
+        }),
+    };
+    let websocket = match ws_port {
+        Some(port) => serde_json::json!({
+            "enabled": true,
+            "bind": "0.0.0.0",
+            "port": port,
+            "tls_enabled": false,
+        }),
+        None => serde_json::json!({
+            "enabled": false,
+            "bind": "",
+            "port": 9696,
+            "tls_enabled": false,
+        }),
+    };
+
+    serde_json::json!({
+        "dv": dv,
+        "fw": {
+            "core": {
+                "log_level": "INFO",
+            },
+            "faces": {
+                "queue_size": 1024,
+                "congestion_marking": true,
+                "lock_threads_to_cores": false,
+                "udp": {
+                    "enabled_unicast": true,
+                    "enabled_multicast": false,
+                    "port_unicast": udp_unicast_port,
+                    "lifetime": 600,
+                    "default_mtu": 1420,
+                },
+                "tcp": tcp,
+                "unix": {
+                    "enabled": true,
+                    "socket_path": socket_path.unwrap_or("/run/nfd/nfd.sock".to_string()),
+                },
+                "websocket": websocket,
+            },
+            "fw": {
+                "threads": 8,
+                "queue_size": 1024,
+                "lock_threads_to_cores": false,
+            },
+            "mgmt": {
+                "allow_localhop": false,
+            },
+        },
+    })
 }
 
 async fn load_secret_data(
@@ -462,7 +492,10 @@ mod tests {
             ws_port: None,
         });
 
-        assert_eq!(config.dv.network, "/root-network");
-        assert_eq!(config.dv.router, "/root-network/router-a");
+        assert_eq!(config["dv"]["network"], "/root-network");
+        assert_eq!(config["dv"]["router"], "/root-network/router-a");
+        assert_eq!(config["fw"]["faces"]["udp"]["port_unicast"], 6363);
+        assert_eq!(config["fw"]["faces"]["tcp"]["enabled"], false);
+        assert_eq!(config["fw"]["faces"]["websocket"]["enabled"], false);
     }
 }
