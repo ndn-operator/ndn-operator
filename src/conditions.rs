@@ -85,14 +85,12 @@ pub trait Conditions {
 macro_rules! impl_conditions {
     ($ty:ty) => {
         impl $crate::conditions::Conditions for $ty {
-            #[cfg_attr(tarpaulin, skip)]
             fn conditions(
                 &self,
             ) -> &Option<Vec<k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition>> {
                 &self.conditions
             }
 
-            #[cfg_attr(tarpaulin, skip)]
             fn conditions_mut(
                 &mut self,
             ) -> &mut Option<Vec<k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition>> {
@@ -130,9 +128,14 @@ mod tests {
     #[test]
     fn impl_conditions_macro_exposes_condition_field() {
         let mut value = MacroConditions { conditions: None };
-        assert!(value.conditions().is_none());
-        value.conditions_mut().replace(Vec::new());
-        assert_eq!(value.conditions().as_ref().unwrap().len(), 0);
+        let read: &dyn Conditions = &value;
+        assert!(read.conditions().is_none());
+
+        let write: &mut dyn Conditions = &mut value;
+        write.conditions_mut().replace(Vec::new());
+
+        let read: &dyn Conditions = &value;
+        assert_eq!(read.conditions().as_ref().unwrap().len(), 0);
     }
 
     #[test]
