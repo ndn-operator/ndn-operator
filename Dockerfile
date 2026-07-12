@@ -5,7 +5,6 @@ ARG VERSION
 WORKDIR /usr/src/app
 
 COPY src src
-COPY operator-derive operator-derive
 COPY Cargo.toml Cargo.toml
 COPY Cargo.lock Cargo.lock
 

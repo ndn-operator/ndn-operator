@@ -1735,7 +1735,6 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "local-ip-address",
- "operator-derive",
  "rustls",
  "rustls-pki-types",
  "schemars 1.2.1",
@@ -1820,15 +1819,6 @@ name = "openssl-probe"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
-
-[[package]]
-name = "operator-derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
 
 [[package]]
 name = "ordered-float"
