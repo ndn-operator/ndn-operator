@@ -139,6 +139,15 @@ mod tests {
     }
 
     #[test]
+    fn impl_conditions_macro_reads_production_status() {
+        let status = crate::router_controller::RouterStatus {
+            conditions: Some(Vec::new()),
+            ..Default::default()
+        };
+        assert_eq!(status.conditions().as_ref().unwrap().len(), 0);
+    }
+
+    #[test]
     fn make_condition_populates_core_fields() {
         let dummy = DummyConditions::default();
         let cond = dummy.make_condition("Ready", true, "Reason", "Message", 7);
