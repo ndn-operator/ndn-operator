@@ -555,7 +555,7 @@ fn projected_volume(name: &str, sources: Vec<VolumeProjection>) -> Volume {
     Volume {
         name: name.to_string(),
         projected: Some(ProjectedVolumeSource {
-            default_mode: Some(0o400),
+            default_mode: Some(0o444),
             sources: Some(sources),
         }),
         ..Volume::default()

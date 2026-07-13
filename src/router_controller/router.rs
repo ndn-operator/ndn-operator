@@ -17,7 +17,6 @@ use kube::{
         wait::Condition,
     },
 };
-use operator_derive::Conditions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
@@ -58,7 +57,7 @@ pub struct RouterSpec {
 }
 
 #[skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema, Conditions)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
 pub struct RouterStatus {
@@ -80,6 +79,7 @@ pub struct RouterStatus {
     /// - NeighborsSynced: last neighbor propagation succeeded (informative)
     pub conditions: Option<Vec<K8sCondition>>,
 }
+crate::impl_conditions!(RouterStatus);
 
 #[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
@@ -101,11 +101,9 @@ impl Router {
         // Base conditions from current status
         let api_router = Api::<Router>::namespaced(ctx.client.clone(), &self.namespace().unwrap());
         let serverside = PatchParams::apply(ROUTER_MANAGER_NAME);
-        let mut conds: Option<Vec<K8sCondition>> = None;
-        // Initialized
-        let mut buf = my_status.clone();
-        buf.conditions = conds;
-        buf.upsert_bool(
+        let mut condition_status = my_status.clone();
+        condition_status.conditions = None;
+        condition_status.upsert_bool(
             "Initialized",
             my_status.initialized,
             if my_status.initialized {
@@ -116,11 +114,7 @@ impl Router {
             None,
             observed_gen,
         );
-        conds = buf.conditions;
-        // Online
-        let mut buf = my_status.clone();
-        buf.conditions = conds;
-        buf.upsert_bool(
+        condition_status.upsert_bool(
             "Online",
             my_status.online,
             if my_status.online {
@@ -131,11 +125,7 @@ impl Router {
             None,
             observed_gen,
         );
-        conds = buf.conditions;
-        // FaceReady
-        let mut buf = my_status.clone();
-        buf.conditions = conds;
-        buf.upsert_bool(
+        condition_status.upsert_bool(
             "FaceReady",
             face_ready,
             if face_ready {
@@ -146,18 +136,13 @@ impl Router {
             None,
             observed_gen,
         );
-        conds = buf.conditions;
-        // Default NeighborsSynced to NotStarted until we run propagation below
-        let mut buf = my_status.clone();
-        buf.conditions = conds;
-        buf.upsert_bool(
+        condition_status.upsert_bool(
             "NeighborsSynced",
             false,
             "NotStarted",
             Some("Neighbor propagation not performed"),
             observed_gen,
         );
-        conds = buf.conditions;
         let ready = my_status.initialized && my_status.online && face_ready;
         let not_ready_msg = if ready {
             None
@@ -174,9 +159,7 @@ impl Router {
             }
             Some(format!("Missing prerequisites: {}", missing.join(", ")))
         };
-        let mut buf = my_status.clone();
-        buf.conditions = conds;
-        buf.upsert_bool(
+        condition_status.upsert_bool(
             "Ready",
             ready,
             if ready {
@@ -187,10 +170,11 @@ impl Router {
             not_ready_msg.as_deref(),
             observed_gen,
         );
-        conds = buf.conditions;
         // If offline, patch conditions and return early
         if !my_status.online {
-            let patch = Patch::Merge(serde_json::json!({ "status": { "conditions": conds } }));
+            let patch = Patch::Merge(
+                serde_json::json!({ "status": { "conditions": condition_status.conditions } }),
+            );
             let _ = api_router
                 .patch_status(&self.name_any(), &serverside, &patch)
                 .await
@@ -292,18 +276,15 @@ impl Router {
             .map_err(Error::KubeError)?;
 
         // Neighbors propagation completed; mark synced
-        let mut buf = my_status.clone();
-        buf.conditions = conds;
-        buf.upsert_bool(
+        condition_status.upsert_bool(
             "NeighborsSynced",
             true,
             "SyncOK",
             Some("Last neighbor propagation completed"),
             observed_gen,
         );
-        conds = buf.conditions;
         let patch = Patch::Merge(serde_json::json!({
-            "status": { "conditions": conds }
+            "status": { "conditions": condition_status.conditions }
         }));
         let _ = api_router
             .patch_status(&self.name_any(), &serverside, &patch)

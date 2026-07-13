@@ -1,5 +1,4 @@
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
-pub use operator_derive::Conditions as DeriveConditions;
 
 // A trait for types that expose a Kubernetes-style `conditions` field
 pub trait Conditions {
@@ -82,6 +81,25 @@ pub trait Conditions {
     }
 }
 
+#[macro_export]
+macro_rules! impl_conditions {
+    ($ty:ty) => {
+        impl $crate::conditions::Conditions for $ty {
+            fn conditions(
+                &self,
+            ) -> &Option<Vec<k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition>> {
+                &self.conditions
+            }
+
+            fn conditions_mut(
+                &mut self,
+            ) -> &mut Option<Vec<k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition>> {
+                &mut self.conditions
+            }
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,6 +110,11 @@ mod tests {
         conds: Option<Vec<K8sCondition>>,
     }
 
+    struct MacroConditions {
+        conditions: Option<Vec<K8sCondition>>,
+    }
+    crate::impl_conditions!(MacroConditions);
+
     impl Conditions for DummyConditions {
         fn conditions(&self) -> &Option<Vec<K8sCondition>> {
             &self.conds
@@ -100,6 +123,28 @@ mod tests {
         fn conditions_mut(&mut self) -> &mut Option<Vec<K8sCondition>> {
             &mut self.conds
         }
+    }
+
+    #[test]
+    fn impl_conditions_macro_exposes_condition_field() {
+        let mut value = MacroConditions { conditions: None };
+        let read: &dyn Conditions = &value;
+        assert!(read.conditions().is_none());
+
+        let write: &mut dyn Conditions = &mut value;
+        write.conditions_mut().replace(Vec::new());
+
+        let read: &dyn Conditions = &value;
+        assert_eq!(read.conditions().as_ref().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn impl_conditions_macro_reads_production_status() {
+        let status = crate::router_controller::RouterStatus {
+            conditions: Some(Vec::new()),
+            ..Default::default()
+        };
+        assert_eq!(status.conditions().as_ref().unwrap().len(), 0);
     }
 
     #[test]

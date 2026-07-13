@@ -1,6 +1,5 @@
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition as K8sCondition;
 use kube::CustomResource;
-use operator_derive::Conditions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
@@ -58,7 +57,7 @@ pub struct IssuerRef {
     pub namespace: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema, Conditions)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CertificateStatus {
     /// The status of the certificate key
@@ -80,6 +79,7 @@ pub struct CertificateStatus {
     /// - Issuing: an issuance/renewal is in progress
     pub conditions: Option<Vec<K8sCondition>>,
 }
+crate::impl_conditions!(CertificateStatus);
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -135,7 +135,7 @@ pub struct ExternalCertificateSpec {
     pub secret_name: String,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema, Conditions)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalCertificateStatus {
     /// The status of the certificate key (if provided)
@@ -152,3 +152,4 @@ pub struct ExternalCertificateStatus {
     /// - CertReady: cert available and valid
     pub conditions: Option<Vec<K8sCondition>>,
 }
+crate::impl_conditions!(ExternalCertificateStatus);

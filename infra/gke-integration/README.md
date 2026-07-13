@@ -51,7 +51,6 @@ cluster and its network. A practical starting point is:
 
 The project should already have the Compute Engine and Kubernetes Engine APIs
 enabled, and the state bucket should already exist.
-
 The test installs the PR image tag produced by the existing Docker workflow:
 `ghcr.io/<owner>/<repo>:pr-<number>`.
 
